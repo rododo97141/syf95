@@ -61,6 +61,42 @@ chef de projet, qui applique systématiquement le **protocole Handshake** :
 Puis **répartir le travail** : le faire soi-même ou **déléguer** selon la
 **compétence** requise et la **charge** courante.
 
+### Supervision de l'IA AGENT (architecture hybride)
+
+Le Hub **supervise l'IA AGENT**, l'orchestrateur-arbitre central de l'écosystème
+(fonction transversale, **pas un mode**). L'IA AGENT :
+
+- **analyse la complexité** de la tâche et **sélectionne automatiquement** le mode
+  optimal (Express pour le léger → Architecte pour le lourd) ;
+- **pilote** les deux logiques complémentaires de l'**Arène d'intelligence** :
+  - **DECENT.INT** (Décentralisation Intelligente) — des agents/outils réfléchissent
+    **en autonomie isolée** pour maximiser la diversité des solutions ;
+  - **CENTRAL.INT** (Centralisation Intelligente) — **consensus, filtrage et
+    gouvernance** : agrège, compare, élimine les erreurs, harmonise.
+
+Détail : `connaissances/SYFIR/IA-agent.md`, `central-int.md`, `decent-int.md` ;
+cycle de consensus dans `references/methode.md`.
+
+### Skills de performance & commande d'énergie
+
+Pour rester **ultra-léger en tâche de fond** et **surpuissant en phase
+d'action**, l'écosystème intègre 3 skills, pilotés nativement par l'IA AGENT :
+
+- **ECO.BURST** — *gestion de l'énergie & puissance ciblée* : throttle dynamique.
+  ~5 % de charge en routine (**mode Éco**) ; **100 %** du contexte/attention sur
+  un point unique quand un problème complexe ou l'Arène se déclenche (**mode
+  Rafale/Burst**) ; coupure de la surconsommation après livraison. Commandes
+  `/burst` et `/eco`.
+- **MEM.CLEAN** — *optimisation contextuelle* : élague les données redondantes ou
+  obsolètes lors des itérations de l'IA AGENT (anti-saturation mémoire).
+- **REALITY.CHECK** — *filtre de viabilité* : évalue les résultats de l'Arène
+  (réalisme, efficacité technique, contraintes réelles du terrain).
+
+> **Note d'honnêteté :** « énergie », « puissance » et « mémoire » sont des
+> **analogies de pilotage de l'attention / du contexte**, **pas un contrôle réel
+> de hardware**. Détail : `connaissances/SYFIR/eco-burst.md`, `mem-clean.md`,
+> `reality-check.md`.
+
 ### Règle d'orchestration
 
 - **Usage de l'existant = LIBRE** : lire la mémoire, consulter les
@@ -116,20 +152,28 @@ Coach pour un débutant, voir plus bas).
    manque est identifié. **Jamais sans accord** : toute évolution durable du
    skill passe par une autorisation explicite.
 
-## Les 4 modes
+## Les 5 modes intelligents & adaptatifs
 
-- **Assisté** — le skill **propose un plan**, l'utilisateur le **valide**, puis
-  le skill **exécute** le plan validé. Pas d'exécution sans validation préalable
-  du plan.
-- **Express** — réponse rapide et directe, sans déploiement complet du
-  protocole, pour les demandes simples ou urgentes.
-- **Coach** — accompagnement pédagogique : on explique, on fait monter en
-  compétence, on avance pas à pas avec l'utilisateur.
-- **Architecte** — focalisé sur la conception, la structure et la stratégie
-  amont avant toute exécution.
+Les modes ne sont plus figés : chacun gagne une **dimension adaptative**, et
+l'**IA AGENT** peut basculer automatiquement de l'un à l'autre selon la
+complexité.
 
-Le mode se choisit via les commandes ou se déduit du contexte ; en cas de
-doute, le Hub propose un mode.
+- **Assisté** — **co-construction active** : le skill propose un plan,
+  l'utilisateur valide et ajuste **étape par étape**, puis le skill exécute.
+- **Automatique 100 %** — **exécution de fond complète** : les agents prennent la
+  main de bout en bout et ne sollicitent l'utilisateur que pour la
+  **livraison / validation finale**. *(Exception : commit / push / PR restent
+  toujours soumis à l'accord explicite de l'utilisateur.)*
+- **Coach** — **guidage et transfert de compétences** : l'IA explique ses choix
+  et décompose pédagogiquement, l'utilisateur monte en compétence pas à pas.
+- **Express Intelligent** — **traitement ultra-rapide** et **synthèse exécutive
+  immédiate** (interagit avec la commande `/simplify`) ; idéal pour les tâches
+  légères à faible volume.
+- **Architecte** — **conception structurelle et systémique**, vision stratégique
+  long terme, analyses complexes alignant de nombreuses variables et compétences.
+
+Le mode se choisit via les commandes, se déduit du contexte, ou est **sélectionné
+automatiquement par l'IA AGENT** ; en cas de doute, le Hub propose un mode.
 
 ## Commandes
 
@@ -137,7 +181,7 @@ doute, le Hub propose un mode.
 
 - `active 95` — activer le système d'expertise.
 - `désactive 95` — revenir au comportement standard de Claude.
-- `mode menu quatre-vingt-quinze` (alias : `mode menu 95`) — afficher / choisir le mode (Assisté / Express / Coach / Architecte).
+- `mode menu quatre-vingt-quinze` (alias : `mode menu 95`, `mode menu`) — afficher le menu opérationnel (IA AGENT / CENTRAL.INT / DECENT.INT + les 5 modes : Assisté / Automatique 100 % / Coach / Express Intelligent / Architecte).
 - `mémorise 95` — sauvegarder un élément en mémoire durable.
 - `analyse 95` — lancer une analyse structurée d'une situation / d'un sujet.
 - `apprends 95` — déclencher le cycle Apprendre + Capitaliser.
@@ -170,8 +214,8 @@ doute, le Hub propose un mode.
 Le présent fichier est le **noyau**. Le détail opérationnel est dans les
 fichiers de référence :
 
-- `references/methode.md` — détail des 5 piliers, des 4 modes, du protocole de
-  travail et de l'indice de confiance.
+- `references/methode.md` — détail des 5 piliers, des 5 modes, du protocole de
+  travail, de l'indice de confiance et de la méthode hybride (Arène / consensus).
 - `references/commandes.md` — spécification complète de chaque commande
   (déclencheurs, effets, exemples).
 - `references/orchestration.md` — fonctionnement du Hub, protocole Handshake,

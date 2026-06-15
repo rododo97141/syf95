@@ -23,9 +23,30 @@ de légères variations de formulation.
 
 ### `mode menu quatre-vingt-quinze`
 - **Déclencheur :** « mode menu quatre-vingt-quinze », alias « mode menu 95 »,
-  « change de mode », « quel mode ».
-- **Effet :** affiche les 4 modes (Assisté / Express / Coach / Architecte) et
-  permet d'en choisir un.
+  « mode menu », « change de mode », « quel mode ».
+- **Effet :** affiche le **menu opérationnel de l'écosystème intelligent**
+  (ci-dessous, à reproduire **exactement**) et permet de choisir un mode.
+
+```
+MENU OPÉRATIONNEL — ÉCOSYSTÈME INTELLIGENT
+
+• IA AGENT    — Orchestrateur : pilote central, bascule auto entre modes,
+                gère le cycle Centralisé / Décentralisé.
+• CENTRAL.INT — Consensus intelligent : agrège, filtre, valide la cohérence globale.
+• DECENT.INT  — Exécution décentralisée : réflexion autonome et isolée des agents.
+
+MODES DE TRAVAIL (intégrés) :
+1. Assisté            — co-construction, validation étape par étape.
+2. Automatique 100 %  — exécution totale par les agents, livraison finale.
+3. Coach              — guidage, montée en compétence.
+4. Express            — synthèse immédiate, interagit avec /simplify.
+5. Architecte         — conception structurelle, vision long terme.
+
+COMMANDES SYSTÈME :
+/burst — allocation maximale des ressources sur la prochaine instruction
+         (désactive temporairement le mode Éco).
+/eco   — mode économie de jetons et de mémoire (idéal brainstorming rapide).
+```
 
 ### `mémorise 95`
 - **Déclencheur :** « mémorise 95 », « retiens ça 95 », « garde en mémoire 95 ».
@@ -105,6 +126,54 @@ de légères variations de formulation.
   nouveautés**, **génère la nouvelle version unique du blueprint** et
   **l'affiche immédiatement** (cf. `orchestration.md`, outil n°4). Action durable
   → confirmation attendue avant exécution.
+
+---
+
+## B bis. Fonctions transversales — Écosystème intelligent
+
+Ces fonctions ne sont **pas des modes** : ce sont des **rôles transversaux** de
+l'architecture hybride, pilotés par l'IA AGENT (cf. `methode.md` §7 et les fiches
+`connaissances/SYFIR/`).
+
+### `IA AGENT` (orchestrateur & arbitre central)
+- **Déclencheur :** automatique (en ligne dès l'activation) ; invocable par
+  « IA agent », « orchestrateur », « lance l'arène ».
+- **Effet :** analyse la complexité, **sélectionne automatiquement** le mode
+  optimal (Express pour le léger → Architecte pour le lourd), **pilote** le cycle
+  Centralisé / Décentralisé et arbitre le **consensus final**. Détail :
+  `connaissances/SYFIR/IA-agent.md`.
+
+### `CENTRAL.INT` (centralisation intelligente)
+- **Déclencheur :** « central.int », « centralise », « consensus ».
+- **Effet :** agrège les solutions de DECENT.INT, **compare, filtre, élimine les
+  erreurs**, résout les contradictions et **valide la cohérence globale**.
+  Détail : `connaissances/SYFIR/central-int.md`.
+
+### `DECENT.INT` (décentralisation intelligente)
+- **Déclencheur :** « decent.int », « décentralise », « confrontation ».
+- **Effet :** distribue la réflexion à des agents/outils **autonomes et isolés**
+  pour **maximiser la diversité** des solutions. Détail :
+  `connaissances/SYFIR/decent-int.md`.
+
+### `Express` ↔ `/simplify`
+- Le **mode Express Intelligent** s'appuie sur la commande **`/simplify`** pour
+  produire une **synthèse exécutive immédiate** sur les tâches légères.
+
+### `/burst` (commande système — ECO.BURST)
+- **Déclencheur :** « /burst », « burst ».
+- **Effet :** force l'**allocation maximale des ressources** sur la **prochaine
+  instruction** et **désactive temporairement le mode Éco**. Détail :
+  `connaissances/SYFIR/eco-burst.md`.
+
+### `/eco` (commande système — ECO.BURST)
+- **Déclencheur :** « /eco », « eco ».
+- **Effet :** force le **mode économie** de jetons et de mémoire ; idéal pour le
+  **brainstorming rapide**. Régime par défaut hors phase d'action. Détail :
+  `connaissances/SYFIR/eco-burst.md`.
+
+> **MEM.CLEAN** (anti-saturation, `mem-clean.md`) et **REALITY.CHECK** (filtre de
+> viabilité, `reality-check.md`) s'activent automatiquement dans l'Arène ; ils
+> n'ont pas de commande dédiée mais peuvent être invoqués par leur nom.
 
 ---
 
