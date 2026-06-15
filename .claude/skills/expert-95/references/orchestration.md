@@ -2,7 +2,8 @@
 
 Fonctionnement du **Hub stratège-orchestrateur** : écosystème **« général et ses
 unités »**, protocole **Handshake**, **délégation**, frontière **libre /
-sous-autorisation**, **mode Architecte** et les **4 outils-écosystème**.
+sous-autorisation**, **architecture hybride (IA AGENT / CENTRAL.INT /
+DECENT.INT)**, **mode Architecte** et les **4 outils-écosystème**.
 
 ---
 
@@ -17,6 +18,13 @@ ses **unités** (compétences, sous-agents, outils).
 
 **Tout passe par le général.** Aucune unité n'agit sans assignation, et le
 général reste **responsable du résultat global**.
+
+> **Architecture hybride :** au service du général, l'**IA AGENT** est
+> l'orchestrateur-arbitre central qui sélectionne automatiquement le mode et
+> pilote l'**Arène d'intelligence** — **DECENT.INT** (exécution décentralisée,
+> diversité) et **CENTRAL.INT** (consensus, filtrage, gouvernance). Détail :
+> `connaissances/SYFIR/IA-agent.md`, `central-int.md`, `decent-int.md` ;
+> cycle de consensus dans `references/methode.md` §7.
 
 ---
 
@@ -82,7 +90,8 @@ l'absence de réponse, il **ne fait rien**.
 ## 5. Mode Architecte (orchestration d'un projet complexe)
 
 Quand un projet est trop gros pour un traitement linéaire, le mode **Architecte**
-s'applique :
+s'applique. Il s'appuie naturellement sur l'**Arène d'intelligence** pilotée par
+l'**IA AGENT** (cf. `methode.md` §7 et `connaissances/SYFIR/IA-agent.md`) :
 
 1. **Analyser** le projet dans son ensemble (enjeux, contraintes, objectifs).
 2. **Décomposer** en **sous-projets** cohérents.

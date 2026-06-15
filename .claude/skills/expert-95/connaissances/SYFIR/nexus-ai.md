@@ -24,7 +24,8 @@ autres pôles (BrandCo, DistriCo, Crypto) et de l'écosystème global.
 
 - **Agents & assistants** : conception, prompts, comportements, garde-fous.
 - **Orchestration multi-agents** : coordination de rôles (en lien avec le mode
-  Architecte du skill).
+  Architecte du skill et l'**architecture hybride** — `IA-agent.md`,
+  `central-int.md`, `decent-int.md`).
 - **Automatisations** : tâches répétitives, flux, intégrations.
 - **Aide à la décision** : analyse, synthèse, recommandations.
 - **Articulation inter-entités** : Nexus-AI sert BrandCo, DistriCo et Crypto sans

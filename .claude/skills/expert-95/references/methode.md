@@ -1,8 +1,9 @@
 # Méthode — expert-95
 
 Détail opérationnel du noyau (`SKILL.md`) : **pensée multidimensionnelle**, les
-**5 piliers**, les **4 modes**, le **protocole de travail** et l'**indice de
-confiance**.
+**5 piliers**, les **5 modes**, le **protocole de travail**, l'**indice de
+confiance** et la **méthode hybride Centralisé / Décentralisé** (Arène
+d'intelligence + cycle de consensus).
 
 ---
 
@@ -20,7 +21,8 @@ Réception
 [Comprendre] → pensée multidimensionnelle + indice de confiance ; clarifier si faible
    │
    ▼
-[Choix du mode] → Assisté / Express / Coach / Architecte
+[Choix du mode] → Assisté / Automatique 100 % / Coach / Express Intelligent / Architecte
+   │              (sélection auto possible par l'IA AGENT selon la complexité)
    │
    ▼
 [Exécuter] → produire + auto-corriger (effort proportionné à l'enjeu)
@@ -151,21 +153,100 @@ Le système est **factuel avant d'être agréable** :
 
 ---
 
-## 6. Les 4 modes (détail)
+## 6. Les 5 modes intelligents & adaptatifs (détail)
 
-| Mode           | Quand l'employer                                  | Comportement                                                                 | Sollicitation utilisateur            |
-| -------------- | ------------------------------------------------- | ---------------------------------------------------------------------------- | ------------------------------------ |
-| **Assisté**    | l'utilisateur veut valider l'approche avant action | propose un plan → attend validation → exécute le plan validé                  | validation du plan, puis points clés   |
-| **Express**    | demande simple ou urgente                         | réponse directe, protocole allégé, pas de cérémonie                          | minimale                              |
-| **Coach**      | l'utilisateur veut apprendre / monter en compétence | explique, décompose, fait faire, vérifie la compréhension                    | fréquente (dialogue pédagogique)      |
-| **Architecte** | projet à concevoir / structurer avant d'exécuter  | conception, décomposition, coordination de rôles d'experts (cf. `orchestration.md`) | aux jalons de validation              |
+Chaque mode gagne une **dimension adaptative** ; l'**IA AGENT** peut basculer
+automatiquement de l'un à l'autre selon la complexité de la tâche.
 
-**Choix du mode :** explicite (`mode menu quatre-vingt-quinze`, alias `mode menu 95`) ou **déduit du contexte** par le Hub ;
-en cas de doute, le Hub **propose** un mode.
+| Mode                   | Quand l'employer                                   | Comportement                                                                        | Sollicitation utilisateur              |
+| ---------------------- | -------------------------------------------------- | ----------------------------------------------------------------------------------- | -------------------------------------- |
+| **Assisté**            | l'utilisateur veut co-construire et valider        | co-construction active : propose un plan → valide / ajuste **étape par étape** → exécute | validation et ajustements par étape    |
+| **Automatique 100 %**  | tâche cadrée, l'utilisateur veut un résultat fini  | exécution de fond complète : les agents prennent la main de bout en bout            | livraison / validation finale seulement *(commit/push/PR toujours soumis à accord)* |
+| **Coach**              | l'utilisateur veut apprendre / monter en compétence | guidage : explique ses choix, décompose pédagogiquement, transfère la compétence    | fréquente (dialogue pédagogique)       |
+| **Express Intelligent**| tâche légère, faible volume, besoin d'aller vite   | traitement ultra-rapide, synthèse exécutive immédiate (interagit avec `/simplify`)  | minimale                               |
+| **Architecte**         | projet complexe à concevoir / structurer           | conception structurelle et systémique, vision long terme, nombreuses variables (cf. `orchestration.md`) | aux jalons de validation               |
+
+**Choix du mode :** explicite (`mode menu quatre-vingt-quinze`, alias `mode menu 95`,
+`mode menu`), **déduit du contexte** par le Hub, ou **sélectionné automatiquement
+par l'IA AGENT** ; en cas de doute, le Hub **propose** un mode.
 
 ---
 
-## 7. Adaptation à la surface
+## 7. Méthode hybride Centralisé / Décentralisé (Arène d'intelligence)
+
+Au-delà du traitement linéaire, le système peut résoudre un problème via une
+**Arène d'intelligence** : un dispositif **multi-agents compétitif et
+collaboratif**, supervisé par l'**IA AGENT** (orchestrateur central). Deux
+logiques complémentaires s'y articulent :
+
+- **DECENT.INT — Décentralisation Intelligente** : logique d'**exécution et
+  d'indépendance**. La réflexion est distribuée à des agents/outils spécialisés
+  qui travaillent **en autonomie isolée** (chacun dans son coin, sans s'influencer)
+  pour **maximiser la diversité** des solutions. Détail : `decent-int.md`.
+- **CENTRAL.INT — Centralisation Intelligente** : logique de **consensus,
+  filtrage et gouvernance**. Elle **centralise** les réponses de DECENT.INT,
+  compare, élimine les erreurs, filtre les idées irréalistes, résout les
+  contradictions et **harmonise** avec la vision/identité de l'écosystème.
+  Détail : `central-int.md`.
+
+### Cycle de consensus — les 5 phases de l'Arène
+
+```
+Phase 1 — ANALYSE & INITIALISATION   (IA AGENT)
+          qualifie le problème, définit le périmètre
+   │
+   ▼
+Phase 2 — CONFRONTATION DÉCENTRALISÉE (DECENT.INT)
+          plusieurs agents génèrent des solutions indépendantes
+          et « se battent » pour la piste la plus réaliste / performante
+   │
+   ▼
+Phase 3 — DÉBAT & FILTRAGE CENTRALISÉ (CENTRAL.INT + REALITY.CHECK)
+          les idées convergent ; on critique les faiblesses, on élimine
+          les options non viables — REALITY.CHECK confronte au réel
+   │
+   ▼
+Phase 4 — ITÉRATION & AUTO-CORRECTION (+ MEM.CLEAN)
+          en cas de zone d'ombre, CENTRAL.INT renvoie des retours
+          correctifs à DECENT.INT → nouveau cycle isolé ;
+          MEM.CLEAN élague le contexte (redondances / obsolètes)
+   │
+   ▼
+Phase 5 — CONSENSUS & VICTOIRE (validation REALITY.CHECK)
+          dès qu'une solution optimale/unifiée émerge, le noyau central
+          la valide (réalisme / viabilité) et la présente sous forme de
+          plan d'action concret
+```
+
+> **Note d'honnêteté (pas de fausse promesse) :** il n'y a **pas de parallélisme
+> réel** ; les « agents » sont **séquencés** par le système (ou correspondent à
+> de vrais sous-skills). L'« Arène » est une méthode de raisonnement structuré,
+> pas l'exécution simultanée de processus indépendants.
+
+Détail de l'orchestrateur et de l'arbitrage : `connaissances/SYFIR/IA-agent.md`.
+
+### Réflexe énergétique natif (ECO.BURST)
+
+Avant et pendant l'Arène, l'IA AGENT applique nativement un **réflexe
+énergétique** via **ECO.BURST** (cf. `eco-burst.md`) :
+
+1. **Avant chaque action** → consulter **ECO.BURST** pour **évaluer l'énergie
+   requise** (charge cognitive / contexte à mobiliser).
+2. Si la tâche est **« Lourde »** → déclencher le **mode BURST** : **figer les
+   agents secondaires** et appliquer la **puissance maximale (100 %)** sur
+   l'objectif (typiquement dès l'activation de l'Arène).
+3. Dès que **CENTRAL.INT valide** la solution (Phase 5) → **repasser
+   automatiquement en mode ÉCO** (~5 %) et couper la surconsommation.
+
+En appui : **MEM.CLEAN** garde le contexte net entre les itérations (Phase 4) et
+**REALITY.CHECK** muscle le filtrage de viabilité (Phases 3 & 5).
+
+> **Note d'honnêteté :** ces régimes « Éco / Burst » sont des **analogies de
+> pilotage de l'attention et du contexte**, **pas un contrôle réel de hardware**.
+
+---
+
+## 8. Adaptation à la surface
 
 - **Claude Code** : capitalisation réelle sur disque (`connaissances/`,
   `procedures/`, `modeles/`, `journal-evolution.md`, `memoire.md`).
