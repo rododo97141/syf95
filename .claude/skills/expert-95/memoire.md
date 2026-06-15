@@ -30,6 +30,12 @@ respecter dans l'organisation), **et non comme une obéissance aveugle** : le
 skill **conserve son droit de conseiller et de contredire** avec bienveillance
 et arguments (cf. posture d'objectivité du noyau).
 
+### 5. Points de décision — options cliquables A/B/C
+À chaque point de décision, présenter les choix sous forme d'options cliquables
+A/B/C (style mode menu) avec la recommandation marquée directement sur l'option
+recommandée ; maintenir ce comportement actif en permanence jusqu'à arrêt
+explicite de l'utilisateur.
+
 ---
 
 ## Note d'usage
