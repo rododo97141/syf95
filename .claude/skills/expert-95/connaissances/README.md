@@ -25,18 +25,27 @@ En conséquence :
 ```
 connaissances/
 ├── README.md            ← ce fichier
-└── SYFIR/               ← cas d'usage SYFIR (chargé à la demande)
-    ├── profil-dirigeant.md   ← gouvernance + vue d'ensemble de l'écosystème
-    ├── brandco.md            ← entité BrandCo
-    ├── districo.md           ← entité DistriCo
-    ├── crypto.md             ← entité Crypto
-    └── nexus-ai.md           ← entité Nexus-AI
+├── SYFIR/               ← cas d'usage SYFIR (chargé à la demande)
+│   ├── profil-dirigeant.md   ← gouvernance + vue d'ensemble de l'écosystème
+│   ├── brandco.md            ← entité BrandCo
+│   ├── districo.md           ← entité DistriCo
+│   ├── crypto.md             ← entité Crypto (principes uniquement)
+│   ├── nexus-ai.md           ← entité Nexus-AI (pôle IA)
+│   ├── IA-agent.md           ← orchestrateur-arbitre central
+│   ├── central-int.md        ← centralisation intelligente
+│   ├── decent-int.md         ← décentralisation intelligente
+│   ├── eco-burst.md          ← gestion énergie & puissance ciblée
+│   ├── mem-clean.md          ← optimisation contextuelle
+│   ├── reality-check.md      ← filtre de viabilité
+│   └── jimmy-ia.md           ← paquet de transfert de contexte
+└── architecture/        ← architecture Nexus (gouvernance interne)
+    ├── governance.md         ← SSOT, ordre d'autorité, nommage
+    ├── identity.md           ← identité du système
+    └── principles.md         ← 9 principes versionnés
 ```
 
-> Les fichiers d'entités (`brandco.md`, `districo.md`, `crypto.md`,
-> `nexus-ai.md`) seront créés ultérieurement. Aucune **donnée sensible** n'est
-> stockée ici : on se limite à des descriptions de haut niveau utiles à
-> l'orchestration.
+> Ces fichiers existent et sont chargés à la demande. Aucune **donnée sensible** :
+> descriptions de haut niveau utiles à l'orchestration.
 
 ## Lecture / écriture
 
