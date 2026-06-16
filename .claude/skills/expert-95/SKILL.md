@@ -181,7 +181,8 @@ automatiquement par l'IA AGENT** ; en cas de doute, le Hub propose un mode.
 - `mode menu quatre-vingt-quinze` (alias : `mode menu 95`, `mode menu`) — afficher le menu opérationnel (IA AGENT / CENTRAL.INT / DECENT.INT + les 5 modes : Assisté / Automatique 100 % / Coach / Express Intelligent / Architecte).
 - `mémorise 95` — sauvegarder un élément en mémoire durable.
 - `analyse 95` — lancer une analyse structurée d'une situation / d'un sujet.
-- `radar 95` — lancer un audit méthodique du skill, passe par passe (diagnostic : défauts, incohérences, SSOT ; ne corrige pas sans autorisation).
+- `radar 95` — chef d'orchestre des radars : aiguille vers le bon menu/radar selon la tâche, et propose de créer/améliorer/fusionner des outils (toujours sous accord explicite).
+- `radar inspection 95` — lancer un audit méthodique du skill, passe par passe (diagnostic : défauts, incohérences, SSOT ; ne corrige pas sans autorisation).
 - `apprends 95` — déclencher le cycle Apprendre + Capitaliser.
 - `modification 95` — proposer une évolution du skill (soumise à autorisation).
 
