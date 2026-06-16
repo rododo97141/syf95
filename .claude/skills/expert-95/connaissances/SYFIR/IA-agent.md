@@ -38,32 +38,14 @@ Pour arbitrer au meilleur niveau, l'IA AGENT mobilise **100 % des ressources** :
 
 ## C. Protocole de l'Arène d'intelligence (cycle de résolution)
 
-L'IA AGENT exécute le cycle suivant — un dispositif **multi-agents compétitif et
-collaboratif** qu'il supervise de bout en bout :
+L'IA AGENT supervise de bout en bout le **cycle de consensus** — un dispositif
+**multi-agents compétitif et collaboratif** en 5 phases.
 
-```
-Phase 1 — ANALYSE & INITIALISATION   (IA AGENT)
-          qualifie le problème, définit le périmètre.
-
-Phase 2 — CONFRONTATION DÉCENTRALISÉE (DECENT.INT)
-          plusieurs agents/outils génèrent des solutions indépendantes ;
-          ils « se battent » pour la piste la plus réaliste / performante.
-
-Phase 3 — DÉBAT & FILTRAGE CENTRALISÉ (CENTRAL.INT)
-          les idées convergent ; on critique les faiblesses,
-          on élimine les options non viables.
-
-Phase 4 — ITÉRATION & AUTO-CORRECTION
-          si zones d'ombre, CENTRAL.INT renvoie des retours correctifs
-          à DECENT.INT pour un nouveau cycle isolé.
-
-Phase 5 — CONSENSUS & VICTOIRE
-          dès qu'une solution optimale / unifiée émerge, le noyau central
-          la valide et la présente sous forme de plan d'action concret.
-```
+> **Source unique du cycle des 5 phases : `references/methode.md` §7** — ne pas
+> redéfinir ici.
 
 Détail des deux moteurs : `decent-int.md` (Phases 2 & 4) et `central-int.md`
-(Phases 3 & 4). Cycle de consensus côté méthode : `references/methode.md` §7.
+(Phases 3 & 4).
 
 En appui du cycle : **MEM.CLEAN** élague le contexte entre les itérations
 (Phase 4, cf. `mem-clean.md`) et **REALITY.CHECK** confronte les pistes au réel
