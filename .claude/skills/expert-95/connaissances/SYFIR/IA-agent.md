@@ -5,7 +5,7 @@
 > phrases*, pas d'**adresses de portefeuille**, pas de **montants**. En cas de
 > doute : **ne pas inclure**.
 
-# SYFIR — IA AGENT (Superviseur / Orchestrateur & Arbitre central)
+# SYFIR — IA AGENT (Orchestrateur-arbitre central, supervisé par le Hub)
 
 > Cas d'usage **SYFIR**, mais l'outil est **universel**. Chargé / initialisé
 > **dès la connexion** (cf. `procedures/handshake.md`).
@@ -14,9 +14,10 @@
 
 ## A. Rôle
 
-L'**IA AGENT** est le **chef d'orchestre suprême** de l'écosystème : une
-**fonction supérieure transversale**, et **pas un simple mode**. Tout passe par
-lui pour l'arbitrage de l'intelligence du système. Il :
+L'**IA AGENT** est l'**orchestrateur-arbitre central** de l'écosystème : une
+**fonction transversale**, et **pas un simple mode**. Il est **supervisé par le
+Hub** (cf. `SKILL.md` — « tout passe par le Hub »), qui lui délègue l'arbitrage
+de l'intelligence du système. Il :
 
 - **analyse la complexité** de la tâche et en définit le périmètre ;
 - **sélectionne automatiquement le mode optimal** (Express Intelligent pour le
