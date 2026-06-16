@@ -3,6 +3,10 @@
 > Cas d'usage **SYFIR**. Chargé **à la demande** uniquement. **Aucune donnée
 > sensible** : descriptions de haut niveau, utiles à l'orchestration.
 
+> ⚠️ **Nexus-AI** = entité (pôle IA) de l'écosystème **SYFIR**. **Ne pas
+> confondre** avec l'**architecture Nexus** interne au dépôt — cf.
+> `connaissances/architecture/governance.md` §0.
+
 ---
 
 ## Rôle
