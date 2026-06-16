@@ -36,6 +36,26 @@ A/B/C (style mode menu) avec la recommandation marquée directement sur l'option
 recommandée ; maintenir ce comportement actif en permanence jusqu'à arrêt
 explicite de l'utilisateur.
 
+### 6. Méthode de correction SSOT validée
+Pour corriger une entorse au principe SSOT, suivre la séquence éprouvée :
+**(1)** cartographier en **lecture seule** toutes les occurrences du concept ;
+**(2)** choisir la **source canonique** (la plus complète et/ou la plus haute
+dans l'ordre d'autorité) ; **(3)** **remplacer les doublons par des renvois**
+vers cette source (ne pas redéfinir) ; **(4)** faire un **commit local** ;
+**(5)** **relire le diff** ; **(6)** publier (**push + PR + fusion**) uniquement
+**sous autorisation explicite** de l'utilisateur.
+
+### 7. Leçon technique — prompts sur une seule ligne dans Claude Code
+Dans Claude Code, **taper les prompts en une seule ligne** : un **saut de ligne
+valide l'envoi**. Composer le message d'un seul tenant avant d'appuyer sur
+Entrée pour éviter un envoi prématuré.
+
+### 8. Leçon technique — pages en connexion live et extension navigateur
+Les pages en **connexion live** (Claude Code en **streaming**, page **branches
+GitHub**) **bloquent parfois la lecture / le clic** de l'extension navigateur.
+Dans ce cas, **s'appuyer sur ce qui est affiché à l'écran** et **réessayer**
+plutôt que de considérer l'élément comme inaccessible.
+
 ---
 
 ## Note d'usage
