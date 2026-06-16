@@ -156,9 +156,11 @@ l'architecture hybride, pilotés par l'IA AGENT (cf. `methode.md` §7 et les fic
   pour **maximiser la diversité** des solutions. Détail :
   `connaissances/SYFIR/decent-int.md`.
 
-### `Express` ↔ `/simplify`
-- Le **mode Express Intelligent** s'appuie sur la commande **`/simplify`** pour
-  produire une **synthèse exécutive immédiate** sur les tâches légères.
+### `/simplify` (commande système — Express Intelligent)
+- **Déclencheur :** « /simplify », « simplifie », « en bref ».
+- **Effet :** produit une **synthèse exécutive immédiate** et condensée sur une
+  tâche légère (l'essentiel, sans détours). Mobilisée par le mode Express
+  Intelligent. Détail : `references/methode.md` §6.
 
 ### `/burst` (commande système — ECO.BURST)
 - **Déclencheur :** « /burst », « burst ».
