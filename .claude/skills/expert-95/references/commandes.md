@@ -76,6 +76,16 @@ COMMANDES SYSTÈME :
      ```
 - **Écriture durable :** une analyse ne se persiste **que via `mémorise 95`**.
 
+### `radar 95`
+- **Déclencheur :** « radar 95 », « radar quatre-vingt-quinze ».
+- **Effet :** lance un audit méthodique du skill, passe par passe (3 fichiers
+  max/passe), pour détecter défauts, incohérences, commandes fantômes et
+  divergences SSOT. Diagnostique seulement : note qualité /10 et gravité /25,
+  trie par gravité, ne corrige rien sans autorisation. Détail complet :
+  `procedures/radar.md`.
+- **Lecture (audit) :** libre. Toute correction issue d'un défaut : sous
+  autorisation.
+
 ### `apprends 95`
 - **Déclencheur :** « apprends 95 », « 95 apprends … », « monte en compétence sur … ».
 - **Effet :** acquisition active d'un domaine. Étapes :
