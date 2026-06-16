@@ -118,7 +118,7 @@ durable).
 | 1 | **Mémo-Némo Lo Lo**     | *(arrière-plan)*       | veille de **cohérence en arrière-plan** : surveille la concordance avec la mémoire et **alerte si incohérence**. |
 | 2 | **Manuel SYF**          | `manuel syf`           | **guide / encyclopédie** de l'écosystème.                                                               |
 | 3 | **Carte 1**             | `Carte 1`              | **liste des outils et quand les choisir** (aide à la sélection).                                        |
-| 4 | **Jimmy IA**            | `Jimmy ia enregistre`  | **efface l'ancien fichier**, **aspire les nouveautés**, **génère la nouvelle version unique du blueprint** et **l'affiche immédiatement**. |
+| 4 | **Jimmy IA**            | `Jimmy ia enregistre`  | **archive l'ancien fichier** (sauvegarde), **aspire les nouveautés**, **génère la nouvelle version unique du blueprint** et **l'affiche** ; l'ancienne version n'est **remplacée qu'après validation**. |
 
 Mémo-Némo Lo Lo agit en continu ; les trois autres sont invoqués par commande
 (cf. `commandes.md`, section B). Jimmy IA effectue une action durable → confirmation.

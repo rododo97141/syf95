@@ -38,13 +38,13 @@ d'origine.
 
 Conservé tel que défini par l'utilisateur :
 
-- **Écrasement propre** : l'ancien contenu est remplacé, pas empilé.
+- **Remplacement propre et sécurisé** : l'ancien contenu est archivé (sauvegarde) puis remplacé — une version unique, pas un empilement.
 - **Version unique** : il n'existe qu'**un seul** snapshot courant à la fois.
 - **Affichage immédiat à l'écran** : le bloc généré est **montré tout de suite**,
   prêt à être copié.
 
 *(Le snapshot est un instantané « à l'instant T » de l'état de la conversation ;
-chaque nouvelle commande régénère et remplace le précédent.)*
+chaque nouvelle commande sauvegarde le blueprint précédent, puis régénère et le remplace (l'ancienne version reste récupérable).)*
 
 ## D. Structure du bloc de transfert généré
 

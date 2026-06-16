@@ -122,9 +122,10 @@ COMMANDES SYSTÈME :
 
 ### `Jimmy ia enregistre`
 - **Déclencheur :** « Jimmy ia enregistre », « Jimmy enregistre ».
-- **Effet :** déclenche **Jimmy IA** : **efface l'ancien fichier**, **aspire les
-  nouveautés**, **génère la nouvelle version unique du blueprint** et
-  **l'affiche immédiatement** (cf. `orchestration.md`, outil n°4). Action durable
+- **Effet :** déclenche **Jimmy IA** : **archive d'abord l'ancien fichier**
+  (sauvegarde de sécurité), **aspire les nouveautés**, **génère la nouvelle
+  version unique du blueprint**, **l'affiche**, puis **ne remplace l'ancienne
+  version qu'une fois la nouvelle validée** (cf. `orchestration.md`, outil n°4). Action durable
   → confirmation attendue avant exécution.
 
 ---
