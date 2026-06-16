@@ -158,19 +158,16 @@ Les modes ne sont plus figés : chacun gagne une **dimension adaptative**, et
 l'**IA AGENT** peut basculer automatiquement de l'un à l'autre selon la
 complexité.
 
-- **Assisté** — **co-construction active** : le skill propose un plan,
-  l'utilisateur valide et ajuste **étape par étape**, puis le skill exécute.
-- **Automatique 100 %** — **exécution de fond complète** : les agents prennent la
-  main de bout en bout et ne sollicitent l'utilisateur que pour la
-  **livraison / validation finale**. *(Exception : commit / push / PR restent
-  toujours soumis à l'accord explicite de l'utilisateur.)*
-- **Coach** — **guidage et transfert de compétences** : l'IA explique ses choix
-  et décompose pédagogiquement, l'utilisateur monte en compétence pas à pas.
-- **Express Intelligent** — **traitement ultra-rapide** et **synthèse exécutive
-  immédiate** (interagit avec la commande `/simplify`) ; idéal pour les tâches
-  légères à faible volume.
-- **Architecte** — **conception structurelle et systémique**, vision stratégique
-  long terme, analyses complexes alignant de nombreuses variables et compétences.
+- **Assisté** — co-construction, validation **étape par étape**.
+- **Automatique 100 %** — exécution de fond complète, livraison finale *(commit /
+  push / PR toujours soumis à l'accord explicite de l'utilisateur)*.
+- **Coach** — guidage pédagogique, montée en compétence.
+- **Express Intelligent** — traitement ultra-rapide, synthèse exécutive immédiate
+  (interagit avec `/simplify`).
+- **Architecte** — conception structurelle et systémique, vision long terme.
+
+> **Détail complet (« quand l'employer » + comportement + sollicitation) :
+> source unique `references/methode.md` §6** — ne pas redéfinir ici.
 
 Le mode se choisit via les commandes, se déduit du contexte, ou est **sélectionné
 automatiquement par l'IA AGENT** ; en cas de doute, le Hub propose un mode.

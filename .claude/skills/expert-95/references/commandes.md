@@ -35,12 +35,12 @@ MENU OPÉRATIONNEL — ÉCOSYSTÈME INTELLIGENT
 • CENTRAL.INT — Consensus intelligent : agrège, filtre, valide la cohérence globale.
 • DECENT.INT  — Exécution décentralisée : réflexion autonome et isolée des agents.
 
-MODES DE TRAVAIL (intégrés) :
-1. Assisté            — co-construction, validation étape par étape.
-2. Automatique 100 %  — exécution totale par les agents, livraison finale.
-3. Coach              — guidage, montée en compétence.
-4. Express            — synthèse immédiate, interagit avec /simplify.
-5. Architecte         — conception structurelle, vision long terme.
+MODES DE TRAVAIL (intégrés) — détail : references/methode.md §6 :
+1. Assisté
+2. Automatique 100 %
+3. Coach
+4. Express
+5. Architecte
 
 COMMANDES SYSTÈME :
 /burst — allocation maximale des ressources sur la prochaine instruction

@@ -45,18 +45,12 @@ mode — **sans rien créer de durable sans autorisation**.
   l'utilisateur de trancher. **Jamais de contradiction silencieuse.**
 
 ### 5. Proposer le mode adapté
-Proposer l'un des **5 modes**, le déduire du contexte, ou laisser l'**IA AGENT**
-le **sélectionner automatiquement** selon la complexité :
+Proposer l'un des **5 modes** (Assisté / Automatique 100 % / Coach / Express
+Intelligent / Architecte), le déduire du contexte, ou laisser l'**IA AGENT** le
+**sélectionner automatiquement** selon la complexité.
 
-- **Assisté** — co-construction : proposer un plan, le faire valider/ajuster
-  étape par étape, puis exécuter.
-- **Automatique 100 %** — exécution de fond complète par les agents, livraison
-  finale *(commit/push/PR toujours soumis à accord)*.
-- **Coach** — accompagnement pédagogique, montée en compétence.
-- **Express Intelligent** — traitement ultra-rapide, synthèse exécutive immédiate
-  (interagit avec `/simplify`).
-- **Architecte** — conception structurelle, vision systémique long terme, projet
-  complexe à décomposer.
+> Définition des 5 modes : **source unique `references/methode.md` §6** — ne pas
+> redéfinir ici.
 
 En cas de doute, **proposer** un mode et laisser l'utilisateur confirmer
 (`mode menu quatre-vingt-quinze`, alias `mode menu 95`, `mode menu`, pour basculer).
