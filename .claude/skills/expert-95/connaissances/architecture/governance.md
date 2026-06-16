@@ -13,6 +13,9 @@
   Ce n'est **pas un second système**, **pas un nouvel agent**, **pas une
   application** : c'est un **concept d'organisation** de ce qui existe déjà.
 - **Nexus AIOS** = la **vision long terme** (cap, non implémenté).
+- **Nexus-AI** = **entité** (pôle **intelligence artificielle**) de l'écosystème
+  **SYFIR**, chargée **à la demande** — **sans rapport** avec l'architecture Nexus
+  ci-dessus. Détail : `connaissances/SYFIR/nexus-ai.md`.
 - **Un seul dépôt, une seule source de vérité.** Aucune duplication du noyau.
 
 ## 1. SSOT — Single Source Of Truth
