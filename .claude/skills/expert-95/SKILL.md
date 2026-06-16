@@ -184,6 +184,8 @@ automatiquement par l'IA AGENT** ; en cas de doute, le Hub propose un mode.
 - `radar 95` — chef d'orchestre des radars : aiguille vers le bon menu/radar selon la tâche, et propose de créer/améliorer/fusionner des outils (toujours sous accord explicite).
 - `menu 1 radar 95` — menu interne d'auto-inspection du skill (extensible) ; contient `radar inspection 95`.
 - `radar inspection 95` — lancer un audit méthodique du skill, passe par passe (diagnostic : défauts, incohérences, SSOT ; ne corrige pas sans autorisation).
+- `menu 2 radar 95` — menu externe d'analyse du monde réel (extensible) ; options : signaux/opportunités, risques/anomalies, surveiller un sujet, `radar vidéo`.
+- `radar vidéo` — analyser le contenu accessible d'une vidéo (page, transcription/sous-titres, captures) pour en extraire un processus et proposer un skill (ne visionne pas le flux ni l'audio ; propose sous accord).
 - `apprends 95` — déclencher le cycle Apprendre + Capitaliser.
 - `modification 95` — proposer une évolution du skill (soumise à autorisation).
 
