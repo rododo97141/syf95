@@ -26,8 +26,8 @@ et les **opérations** associées.
 - **Opérations** : chaîne d'exécution, disponibilité, suivi de service.
 - **Relation marché** : interface avec clients / partenaires de distribution.
 - **Articulation inter-entités** : DistriCo donne corps à la promesse de
-  **BrandCo** sur le terrain, et peut s'appuyer sur **Nexus-AI** pour
-  l'optimisation.
+  **BrandCo** sur le terrain, et peut s'appuyer sur l'**IA AGENT** (orchestration
+  de l'écosystème) pour l'optimisation.
 
 ## Points d'attention pour le skill
 
@@ -40,8 +40,8 @@ Quand le skill intervient sur le volet DistriCo, il doit penser à :
 - **Fiabilité opérationnelle** : disponibilité, qualité, continuité de service.
 - **Mesure & boucle de retour** : remonter les signaux du marché vers
   l'écosystème.
-- **Synergies** : exploiter les leviers de Nexus-AI pour l'efficacité, sans
-  rompre la cohérence d'ensemble.
+- **Synergies** : exploiter les leviers d'orchestration de l'IA AGENT pour
+  l'efficacité, sans rompre la cohérence d'ensemble.
 - **Universalité du skill** : DistriCo est un **cas d'usage** ; les méthodes de
   distribution / opérations restent générales et réutilisables ailleurs.
 
