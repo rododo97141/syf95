@@ -78,11 +78,23 @@ COMMANDES SYSTÈME :
 
 ### `radar 95`
 - **Déclencheur :** « radar 95 », « radar quatre-vingt-quinze ».
+- **Effet :** **chef d'orchestre des radars** (ne réalise pas l'audit lui-même).
+  Deux fonctions : (1) **aiguillage intelligent** — oriente vers le bon menu /
+  radar selon la tâche (ex. `radar inspection 95` pour auditer le skill,
+  `mode menu quatre-vingt-quinze` pour choisir un mode) ; (2) **évolution par
+  l'expérience** — propose de **créer / améliorer / fusionner** des outils,
+  **toujours sous accord explicite** (jamais d'auto-modification). Détail :
+  `procedures/radar.md` (Partie I).
+- **Aiguillage / proposition :** libre. **Création / modification / fusion** d'un
+  outil : sous autorisation.
+
+### `radar inspection 95`
+- **Déclencheur :** « radar inspection 95 ».
 - **Effet :** lance un audit méthodique du skill, passe par passe (3 fichiers
   max/passe), pour détecter défauts, incohérences, commandes fantômes et
   divergences SSOT. Diagnostique seulement : note qualité /10 et gravité /25,
   trie par gravité, ne corrige rien sans autorisation. Détail complet :
-  `procedures/radar.md`.
+  `procedures/radar.md` (Partie II).
 - **Lecture (audit) :** libre. Toute correction issue d'un défaut : sous
   autorisation.
 
