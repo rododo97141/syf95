@@ -25,8 +25,8 @@ partenaires.
 - **Identité** : nom, univers, valeurs, ton, charte.
 - **Positionnement** : cible, proposition de valeur, différenciation.
 - **Communication & contenu** : récit de marque, messages, supports.
-- **Cohérence inter-entités** : la marque s'incarne aussi à travers DistriCo et
-  Crypto — BrandCo veille à l'unité d'ensemble, sous l'orchestration de l'IA AGENT.
+- **Cohérence inter-entités** : la marque s'incarne aussi à travers DistriCo,
+  Crypto et Nexus-AI — BrandCo veille à l'unité d'ensemble.
 
 ## Points d'attention pour le skill
 
@@ -40,7 +40,7 @@ Quand le skill intervient sur le volet BrandCo, il doit penser à :
 - **Long terme** : arbitrer en faveur du capital marque, pas seulement de l'effet
   immédiat.
 - **Articulation avec les autres entités** : signaler toute incohérence entre la
-  marque et ce que portent DistriCo / Crypto.
+  marque et ce que portent DistriCo / Crypto / Nexus-AI.
 - **Universalité du skill** : BrandCo est un **cas d'usage** ; les méthodes
   marketing/branding restent générales et réutilisables ailleurs.
 
