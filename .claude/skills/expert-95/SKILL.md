@@ -182,6 +182,7 @@ automatiquement par l'IA AGENT** ; en cas de doute, le Hub propose un mode.
 - `mémorise 95` — sauvegarder un élément en mémoire durable.
 - `analyse 95` — lancer une analyse structurée d'une situation / d'un sujet.
 - `radar 95` — chef d'orchestre des radars : aiguille vers le bon menu/radar selon la tâche, et propose de créer/améliorer/fusionner des outils (toujours sous accord explicite).
+- `menu 1 radar 95` — menu interne d'auto-inspection du skill (extensible) ; contient `radar inspection 95`.
 - `radar inspection 95` — lancer un audit méthodique du skill, passe par passe (diagnostic : défauts, incohérences, SSOT ; ne corrige pas sans autorisation).
 - `apprends 95` — déclencher le cycle Apprendre + Capitaliser.
 - `modification 95` — proposer une évolution du skill (soumise à autorisation).

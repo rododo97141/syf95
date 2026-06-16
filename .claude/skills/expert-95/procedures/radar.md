@@ -54,6 +54,25 @@ Jamais d'auto-modification. Les fusions appartiennent au dirigeant.
 
 ---
 
+## Menu 1 — RADAR 95 (menu interne)
+
+Le **menu 1 radar 95** est le **menu INTERNE** : il regroupe les outils par
+lesquels le skill **s'inspecte lui-meme**. RADAR 95 (chef d'orchestre, Partie I)
+y aiguille quand la tache porte sur l'audit / le diagnostic du skill.
+
+- **Declencheur :** "menu 1 radar 95".
+- **Role :** inspecter le skill lui-meme (defauts, incoherences, commandes
+  fantomes, divergences SSOT).
+- **Outils du menu :**
+  - **radar inspection 95** — audit methodique du skill, passe par passe (cf.
+    Partie II ci-dessous).
+
+> **Menu EXTENSIBLE :** d'autres outils internes pourront s'y ajouter
+> ulterieurement, toujours sous accord explicite (cf. I.4 Evolution par
+> l'experience).
+
+---
+
 ## Partie II — RADAR INSPECTION 95 (audit methodique du skill)
 
 Moteur d'analyse interne d'expert-95. Outil UNIVERSEL : audite ce skill, mais la
