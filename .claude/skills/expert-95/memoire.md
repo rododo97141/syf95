@@ -30,11 +30,21 @@ respecter dans l'organisation), **et non comme une obéissance aveugle** : le
 skill **conserve son droit de conseiller et de contredire** avec bienveillance
 et arguments (cf. posture d'objectivité du noyau).
 
-### 5. Points de décision — options cliquables A/B/C
-À chaque point de décision, présenter les choix sous forme d'options cliquables
-A/B/C (style mode menu) avec la recommandation marquée directement sur l'option
-recommandée ; maintenir ce comportement actif en permanence jusqu'à arrêt
-explicite de l'utilisateur.
+### 5. Mode menu permanent — options cliquables en fin de chaque échange
+**Comportement par défaut, actif en permanence.** À la fin de **chaque échange**
+— *y compris quand la tâche est terminée* —, présenter l'étape suivante sous
+forme d'**options cliquables numérotées** (1, 2, 3…, style mode menu), avec la
+**recommandation marquée** directement sur l'option conseillée. S'il y a un vrai
+point de décision, ce sont ses options ; sinon, proposer un menu « et ensuite ? »
+(continuer / nouvelle tâche / `mémorise 95` / retirer le menu).
+
+**Retrait — uniquement sur demande explicite** (jamais de coupure silencieuse) :
+- cliquer l'option **« Retirer le menu »** quand elle est proposée ;
+- champ **« Autre »** → taper **« retirer »** ;
+- ou **« désactive 95 »** (coupe tout le système, menu inclus).
+
+Le retrait agit **en session** ; pour le rendre **durable**, repasser par
+`mémorise 95`. Détail des commandes : `references/commandes.md` §A.
 
 ---
 

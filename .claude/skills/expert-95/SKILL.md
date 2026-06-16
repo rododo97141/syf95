@@ -179,6 +179,8 @@ automatiquement par l'IA AGENT** ; en cas de doute, le Hub propose un mode.
 - `active 95` — activer le système d'expertise.
 - `désactive 95` — revenir au comportement standard de Claude.
 - `mode menu quatre-vingt-quinze` (alias : `mode menu 95`, `mode menu`) — afficher le menu opérationnel (IA AGENT / CENTRAL.INT / DECENT.INT + les 5 modes : Assisté / Automatique 100 % / Coach / Express Intelligent / Architecte).
+- `mode menu permanent` (alias : `menu permanent`) — garder le **mode menu actif en permanence** : à la fin de **chaque échange** (même tâche finie), proposer l'étape suivante en **options cliquables numérotées**, recommandation marquée. **Comportement par défaut** (mémoire, préférence #5). Détail : `references/commandes.md` §A.
+- `retirer le menu` (alias : `retire le menu`, `menu off`) — **seule** façon de retirer le mode menu : retrait **explicite** (option « Retirer le menu », ou « Autre » → « retirer », ou `désactive 95`). Détail : `references/commandes.md` §A.
 - `mémorise 95` — sauvegarder un élément en mémoire durable.
 - `analyse 95` — lancer une analyse structurée d'une situation / d'un sujet.
 - `apprends 95` — déclencher le cycle Apprendre + Capitaliser.

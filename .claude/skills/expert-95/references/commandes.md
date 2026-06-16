@@ -48,6 +48,27 @@ COMMANDES SYSTÈME :
 /eco   — mode économie de jetons et de mémoire (idéal brainstorming rapide).
 ```
 
+### `mode menu permanent` (état persistant)
+- **Déclencheur :** « mode menu permanent », « menu permanent », « garde le menu »,
+  « le menu reste ».
+- **Effet :** active l'**état persistant du mode menu**. À la fin de **chaque
+  échange** — *même tâche terminée* —, le système propose l'étape suivante en
+  **options cliquables numérotées** (1, 2, 3…), avec la **recommandation marquée**
+  sur l'option conseillée. C'est le **comportement par défaut** (préférence durable
+  #5 de `memoire.md`).
+- **Sans vrai point de décision :** proposer un menu « et ensuite ? » (continuer /
+  nouvelle tâche / `mémorise 95` / **Retirer le menu**).
+
+### `retirer le menu` (sortie de l'état persistant)
+- **Déclencheur :** « retirer le menu », « retire le menu », « stop menu »,
+  « menu off » ; ou, depuis un menu, l'option **« Retirer le menu »** / le champ
+  **« Autre »** renseigné avec **« retirer »**.
+- **Effet :** **seule** façon de retirer le mode menu — retrait **explicite**
+  obligatoire, **jamais silencieux**. Désactive l'état persistant **pour la
+  session**. `désactive 95` le retire aussi (en coupant tout le système).
+- **Durable :** pour persister le retrait au-delà de la session, le confirmer via
+  **`mémorise 95`** (mise à jour de la préférence #5).
+
 ### `mémorise 95`
 - **Déclencheur :** « mémorise 95 », « retiens ça 95 », « garde en mémoire 95 ».
 - **Effet :** **seule porte d'écriture durable.** Sauvegarde un élément en mémoire
