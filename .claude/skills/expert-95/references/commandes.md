@@ -88,6 +88,15 @@ COMMANDES SYSTÈME :
 - **Aiguillage / proposition :** libre. **Création / modification / fusion** d'un
   outil : sous autorisation.
 
+### `menu 1 radar 95`
+- **Déclencheur :** « menu 1 radar 95 ».
+- **Effet :** ouvre le **menu interne** (le skill s'inspecte lui-même) ; regroupe
+  les outils d'auto-inspection. Outil actuel : `radar inspection 95` (audit
+  méthodique du skill). **Menu extensible** : d'autres outils internes pourront
+  s'y ajouter, toujours sous accord. Détail : `procedures/radar.md` (section
+  « Menu 1 »).
+- **Lecture :** libre. Ajout / modification d'un outil du menu : sous autorisation.
+
 ### `radar inspection 95`
 - **Déclencheur :** « radar inspection 95 ».
 - **Effet :** lance un audit méthodique du skill, passe par passe (3 fichiers
