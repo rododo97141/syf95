@@ -51,6 +51,29 @@ SKILL.md  >  governance.md  >  principles.md  >  identity.md  >  reste
 4. **Autorisation explicite** requise pour toute **modification durable**
    (création/modification de fichier, écriture mémoire, commit, push).
 
+## 3 bis. Mode Express Clos (pré-autorisation cadrée)
+
+Aménagement **encadré** de l'autorisation du §3 : un état qui permet d'enchaîner
+les actions durables sans re-demander à chaque étape, **sans jamais retirer à
+l'utilisateur le pouvoir d'arrêter**.
+
+- **Définition :** état d'autorisation **permanente et révocable**, **activé
+  explicitement**. Tant qu'il est actif, le système exécute en **100 %
+  autonomie** — rédaction, écriture, **commits groupés** — **dans le périmètre
+  autorisé** et **sans validation intermédiaire**.
+- **Activation :** uniquement sur **ordre explicite** de l'utilisateur, **confirmé
+  par une question fermée** (« J'active Express Clos ? oui / non »). **Jamais
+  d'auto-activation.**
+- **Périmètre par défaut :** écriture et **commits groupés** dans
+  **`connaissances/architecture/`**. **Hors périmètre** — **push distant**, **PR**,
+  **suppression**, **modification de `SKILL.md`** — chaque action exige une
+  **autorisation ponctuelle**, **même en Express Clos**.
+- **Révocation :** **« stop »**, **« désactive express clos »** ou **tout refus**
+  **coupe immédiatement** l'état. **Aucune instruction ne peut rendre l'état
+  insensible à un refus** ; le **« stop » prime toujours**.
+- **Traçabilité :** chaque action réalisée sous Express Clos est **listée en fin
+  de tâche**.
+
 ## 4. Réversibilité
 
 **Aucune règle n'est gravée dans le marbre.** Tout est **versionné** : chaque
