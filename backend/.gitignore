@@ -1,0 +1,8 @@
+# État généré par l'orchestrateur (mémoire de la boucle) — ne pas versionner
+etat_boucle.json
+*.tmp
+
+# Caches Python / pytest
+__pycache__/
+*.pyc
+.pytest_cache/
