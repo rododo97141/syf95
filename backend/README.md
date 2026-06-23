@@ -1,17 +1,22 @@
 # Backend NEXUS — amorce du « loop engineering »
 
-Amorce du **backend de la boucle auto-mandatée** de l'écosystème NEXUS. Cette
-première brique pose deux choses :
+Amorce du **backend de la boucle auto-mandatée** de l'écosystème NEXUS. Briques
+posées :
 
 1. un **orchestrateur de boucle reprenable** (la mécanique « loop engineering ») ;
 2. un **filtre d'admission** pour l'organe **96** (la formule du conseil
-   inter-systèmes).
+   inter-systèmes) ;
+3. un **moteur interchangeable** (Voie 5) — l'IA derrière les organes
+   (Claude/Gemini/GPT/Kimi), branchée par **injection de dépendance** ;
+4. une **transcription** optionnelle (Voie 6 / Whisper) — l'« oreille », avec
+   **repli propre** si Whisper n'est pas installé.
 
 > **Honnêteté technique.** Les organes 96/97/98 sont ici des **stubs** (amorces)
-> destinés à être remplacés. Le vrai apport de ce backend, c'est la **mécanique
-> de boucle reprenable** et le **filtre d'admission** — pas une exécution
-> autonome réelle. Cet esprit suit les principes NEXUS (« ne pas survendre » —
-> cf. `.claude/skills/expert-95/connaissances/architecture/principles.md`, P5
+> destinés à être remplacés. Le vrai apport, c'est la **mécanique de boucle
+> reprenable**, le **filtre d'admission** et les **points d'extension propres**
+> (moteur, oreille) — pas une exécution autonome réelle. Cet esprit suit les
+> principes NEXUS (« ne pas survendre » —
+> `.claude/skills/expert-95/connaissances/architecture/principles.md`, P5
 > simplicité et P8 honnêteté technique).
 
 ---
@@ -22,7 +27,7 @@ première brique pose deux choses :
 | ------ | ---- | --------------- |
 | **95** | pense / planifie | construit ou recharge le plan de tâches |
 | **96** | analyse — « voit pour agir » | vérifie + **filtre d'admission** (auto-mandat) |
-| **97** | agit | exécute une tâche (stub) |
+| **97** | agit | exécute une tâche **via un `Moteur` injecté** (IA interchangeable) |
 | **98** | immunité / sécurité — **droit de veto** | bloque une action sensible non autorisée |
 | **mémoire** | persistance | le fichier d'état **JSON** de la boucle |
 
@@ -36,19 +41,24 @@ première brique pose deux choses :
 
 ```
 backend/
-├── orchestrateur.py            # (a) boucle reprenable : planifie→exécute→vérifie→état JSON→reprise
-├── filtre_admission.py         # (b) filtre d'admission de 96 (formule du conseil inter-systèmes)
+├── orchestrateur.py             # (a) boucle reprenable : planifie→exécute→vérifie→état JSON→reprise
+├── filtre_admission.py          # (b) filtre d'admission de 96 (formule du conseil inter-systèmes)
+├── moteur.py                    # (Voie 5) IA interchangeable : Moteur / MoteurMock / AdaptateurAPI
+├── transcription.py             # (Voie 6) oreille Whisper, repli propre si absent
 ├── tests/
-│   └── test_filtre_admission.py# (c) tests pytest du filtre d'admission
-├── README.md                   # (d) ce fichier
-├── conftest.py                 # rend backend/ importable par pytest
-├── requirements-dev.txt        # dépendance de dev unique : pytest
-└── .gitignore                  # ignore l'état généré + caches
+│   ├── test_filtre_admission.py # tests pytest du filtre d'admission
+│   ├── test_moteur.py           # tests pytest du moteur (mock déterministe, clé absente…)
+│   └── test_transcription.py    # tests pytest de la transcription (repli)
+├── README.md                    # ce fichier
+├── conftest.py                  # rend backend/ importable par pytest
+├── requirements-dev.txt         # dépendance de dev unique : pytest
+└── .gitignore                   # ignore l'état généré + caches
 ```
 
 **Zéro dépendance lourde** : les modules n'utilisent que la **bibliothèque
-standard** Python (`json`, `dataclasses`, `enum`, `pathlib`, `argparse`,
-`datetime`). `pytest` n'est requis **que** pour lancer les tests.
+standard** (`json`, `dataclasses`, `enum`, `pathlib`, `argparse`, `datetime`,
+`urllib`, `importlib`). `pytest` n'est requis **que** pour lancer les tests.
+**Whisper est optionnel** : son absence ne casse rien (voir §6).
 
 ---
 
@@ -68,6 +78,10 @@ La boucle auto-mandatée enchaîne, à chaque tâche :
 **chaque** tâche dans `etat_boucle.json`. Si la boucle est interrompue, le
 prochain lancement **repart exactement là où elle s'était arrêtée** : on ne
 rejoue jamais une tâche déjà `fait`e ou `bloque`ée.
+
+**97 agit via un Moteur injecté.** L'organe 97 n'appelle pas un fournisseur en
+dur : il appelle un `Moteur` (cf. §5). Par défaut c'est `MoteurMock`
+(déterministe, hors-ligne) — la boucle tourne **sans réseau ni clé d'API**.
 
 **Auto-mandat.** Avant de dérouler le plan, l'organe 96 détecte des « écarts »
 et les passe au filtre d'admission : un écart **admis** qui est une **création**
@@ -123,12 +137,83 @@ création).
 
 ---
 
-## 5. Comment lancer
+## 5. Le moteur interchangeable (Voie 5)
+
+But : rendre l'**IA derrière les organes interchangeable** sans toucher au reste
+du backend. Les organes dépendent d'une **interface** `Moteur`, pas d'un
+fournisseur.
+
+| Classe | Rôle |
+| ------ | ---- |
+| `Moteur` (abstrait) | interface : `generer(prompt) -> str` |
+| `MoteurMock` | **déterministe**, hors-ligne — tests et mode dégradé |
+| `AdaptateurAPI` | **générique**, compatible « OpenAI Chat Completions » |
+
+**Clé d'API : jamais en dur.** `AdaptateurAPI` lit la clé dans une **variable
+d'environnement** ; si elle est absente, `generer` lève une `ErreurMoteur` au
+message explicite (aucun appel réseau n'est tenté).
+
+```python
+from moteur import AdaptateurAPI
+from orchestrateur import tourner
+from pathlib import Path
+
+# La clé vient de l'environnement (ex. export MOTEUR_API_CLE=sk-...).
+moteur = AdaptateurAPI(base_url="https://api.openai.com/v1", modele="gpt-4o-mini")
+tourner(Path("etat_boucle.json"), moteur=moteur)   # 97 utilisera ce moteur
+```
+
+Exemples de configuration (modèles/URL à **vérifier chez le fournisseur**) :
+
+| Fournisseur | `base_url` (endpoint compatible OpenAI) | `modele` (exemple) | `cle_env` |
+| ----------- | --------------------------------------- | ------------------ | --------- |
+| OpenAI / GPT | `https://api.openai.com/v1` | `gpt-4o-mini` | `OPENAI_API_KEY` |
+| Kimi / Moonshot | `https://api.moonshot.cn/v1` | `moonshot-v1-8k` | `MOONSHOT_API_KEY` |
+| Gemini | endpoint compatible OpenAI de Google | `gemini-…` | `GEMINI_API_KEY` |
+| Claude | endpoint compatible OpenAI d'Anthropic | `claude-opus-4-8` | `ANTHROPIC_API_KEY` |
+
+> **Honnêteté (stub vs réel).** `AdaptateurAPI` parle le schéma **OpenAI Chat
+> Completions** (`POST /chat/completions`, réponse `choices[0].message.content`).
+> C'est un vrai appel HTTP, mais il n'est **pas testé contre une API en direct**
+> ici (les tests couvrent la logique hors-ligne). Pour l'**API native** d'un
+> fournisseur — p. ex. Anthropic : `POST /v1/messages`, en-têtes `x-api-key` +
+> `anthropic-version: 2023-06-01`, réponse `content[0].text`, modèle actuel
+> `claude-opus-4-8` — il faut une **petite sous-classe** de `Moteur` qui
+> surcharge `generer`. Les paramètres `entete_cle` / `prefixe_cle` permettent
+> déjà d'adapter l'en-tête d'authentification.
+
+---
+
+## 6. La transcription / oreille (Voie 6, Whisper)
+
+`transcription.transcrire(chemin_audio) -> str` utilise **Whisper s'il est
+installé**. Whisper est une **dépendance optionnelle** : son absence ne provoque
+**aucun plantage**.
+
+- `strict=False` (**défaut**) → renvoie un **message de repli clair** préfixé
+  `[transcription indisponible]` (zéro plantage) ;
+- `strict=True` → lève `TranscriptionIndisponible` (gestion par exception).
+
+Un **fichier introuvable** lève toujours `FileNotFoundError` (vraie erreur, pas
+un cas de repli). Pour activer l'oreille : `pip install openai-whisper` (+ `ffmpeg`).
+
+```python
+from transcription import transcrire, whisper_disponible
+
+if whisper_disponible():
+    texte = transcrire("memo.wav")          # transcription réelle
+else:
+    texte = transcrire("memo.wav")          # message de repli clair, pas de crash
+```
+
+---
+
+## 7. Comment lancer
 
 ### Lancer la boucle
 
 ```bash
-# Depuis la racine du dépôt.
+# Depuis la racine du dépôt. MoteurMock par défaut : aucun réseau, aucune clé.
 python3 backend/orchestrateur.py            # déroule la boucle jusqu'au bout
 python3 backend/orchestrateur.py --reset    # repart de zéro (efface l'état)
 ```
@@ -151,8 +236,8 @@ Cycle 2 · 2/6 faite(s) · 0 bloquée(s) par 98 · 4 en attente
 Cycle 5 · 5/6 faite(s) · 1 bloquée(s) par 98 · 0 en attente
 ```
 
-Options : `--etat <chemin>` pour un fichier d'état alternatif, `--reset` pour
-effacer l'état, `--pas N` pour limiter le nombre de tâches d'un passage.
+Options : `--etat <chemin>` (fichier d'état alternatif), `--reset` (efface
+l'état), `--pas N` (limite le nombre de tâches d'un passage).
 
 ### Lancer les tests
 
@@ -161,26 +246,28 @@ pip install -r backend/requirements-dev.txt   # installe pytest (dev uniquement)
 python3 -m pytest backend/tests -q
 ```
 
-Résultat attendu : `7 passed`. Cas couverts : écart périphérique rejeté, écart
-central retenu, file saturée qui élève le seuil, budget de génération, coût nul,
-tri du lot d'admis.
+Résultat attendu : **`20 passed`**. Couverture : filtre d'admission
+(périphérique rejeté, central retenu, file saturée, budget, coût nul, tri),
+moteur (mock déterministe, interface abstraite, **clé absente → erreur claire**,
+extraction OpenAI, injection dans l'orchestrateur), transcription (repli propre,
+mode strict, fichier absent).
 
 ---
 
-## 6. Ce qui reste à faire
+## 8. Ce qui reste à faire
 
 - **Remplacer les stubs** 96/97/98 par les vrais organes (exécution réelle de
   97, vérification riche de 96, politique de veto de 98).
+- **Sous-classes natives** de `Moteur` par fournisseur (ex. Anthropic
+  `/v1/messages`), gestion du `max_tokens`, du streaming et des erreurs/refus.
 - **Lever le veto de 98** sous **autorisation explicite** (et tracer qui/quand).
-- **Détecteur d'écarts réel** pour 96 (aujourd'hui les écarts sont pré-définis
-  et semés une seule fois).
-- **File d'attente vivante** : faire varier `taille_file` au fil de l'exécution
-  (le seuil dynamique réagirait alors en temps réel ; pour l'instant la taille
-  est mesurée une fois au démarrage du cycle).
-- **Mémoire partagée** entre la boucle et la mémoire de l'écosystème (au-delà du
-  seul fichier d'état local).
+- **Détecteur d'écarts réel** pour 96 (les écarts sont pré-définis et semés une
+  seule fois).
+- **File d'attente vivante** : faire varier `taille_file` en cours d'exécution
+  (le seuil dynamique réagirait en temps réel ; il est mesuré une fois par cycle).
+- **Oreille réelle** : choix du modèle Whisper, langue, horodatage des segments.
+- **Mémoire partagée** entre la boucle et la mémoire de l'écosystème.
 - **Observabilité** : métriques (taux d'admission, budget consommé, vetos),
   rotation du journal.
-- **Robustesse** : reprise après corruption, verrouillage si plusieurs boucles
-  écrivent le même état.
+- **Robustesse** : reprise après corruption, verrouillage multi-boucles.
 ```

@@ -12,7 +12,8 @@ s'était arrêtée.
 
 Rôle des organes (ici sous forme de STUBS à remplacer plus tard) :
   - 95  pense / planifie       → construit (ou recharge) le plan de tâches.
-  - 97  agit                   → exécute une tâche  (stub `executer_tache`).
+  - 97  agit                   → exécute une tâche via un Moteur injecté
+                                 (IA interchangeable ; `MoteurMock` par défaut).
   - 96  voit / analyse         → vérifie la cohérence + auto-mandate via le filtre.
   - 98  immunité / veto        → bloque une action sensible non autorisée.
   - mémoire                    → le fichier d'état JSON.
@@ -30,6 +31,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from filtre_admission import Decision, Ecart, FiltreAdmission
+from moteur import Moteur, MoteurMock
 
 # Fichier d'état par défaut : la « mémoire » de la boucle, à côté de ce script.
 ETAT_DEFAUT = Path(__file__).resolve().parent / "etat_boucle.json"
@@ -119,12 +121,15 @@ def planifier(chemin_etat: Path) -> dict:
 # ---------------------------------------------------------------------------
 # Organe 97 : agit (STUB)
 # ---------------------------------------------------------------------------
-def executer_tache(tache: dict) -> dict:
+def executer_tache(tache: dict, moteur: Moteur) -> dict:
     """
-    STUB de l'organe 97. À remplacer par la vraie exécution (appel d'outil,
-    action réelle…). Ici, on simule un succès et on renvoie une « sortie ».
+    STUB de l'organe 97 : agit en s'appuyant sur un Moteur (l'IA injectée).
+    L'IA est INTERCHANGEABLE — `MoteurMock` en test/hors-ligne, `AdaptateurAPI`
+    (Claude/Gemini/GPT/Kimi) en production — sans rien changer ici.
     """
-    return {"sortie": f"[97] action réalisée : {tache['libelle']}", "ok": True}
+    prompt = f"Réalise la tâche NEXUS suivante : {tache['libelle']}"
+    sortie = moteur.generer(prompt)
+    return {"sortie": f"[97] {sortie}", "ok": True}
 
 
 # ---------------------------------------------------------------------------
@@ -208,14 +213,21 @@ def detecter_et_filtrer(etat: dict, filtre: FiltreAdmission) -> None:
 # ---------------------------------------------------------------------------
 # La boucle (loop engineering)
 # ---------------------------------------------------------------------------
-def tourner(chemin_etat: Path, pas: int | None = None) -> dict:
+def tourner(chemin_etat: Path, pas: int | None = None,
+            moteur: Moteur | None = None) -> dict:
     """
     Exécute la boucle : planifie → exécute → vérifie → écrit l'état → reprend.
 
     `pas` : nombre maximum de tâches traitées pour CE passage (None = jusqu'au
     bout). Utiliser `--pas 1` plusieurs fois de suite démontre la reprise :
     chaque lancement avance d'une tâche et repart où le précédent s'est arrêté.
+
+    `moteur` : l'IA injectée qu'utilise l'organe 97 (injection de dépendance).
+    Par défaut `MoteurMock` (déterministe, hors-ligne) : la boucle tourne sans
+    réseau ni clé d'API.
     """
+    if moteur is None:
+        moteur = MoteurMock()
     etat = planifier(chemin_etat)        # 95 : (re)charge le plan
     etat["cycle"] += 1
 
@@ -231,8 +243,8 @@ def tourner(chemin_etat: Path, pas: int | None = None) -> dict:
         if pas is not None and traitees >= pas:
             break     # quota du passage atteint → on s'arrête proprement
 
-        # 97 agit.
-        resultat = executer_tache(tache)
+        # 97 agit (via le Moteur injecté).
+        resultat = executer_tache(tache, moteur)
         tache["resultat"] = resultat["sortie"]
 
         # 96 + 98 vérifient.
