@@ -10,6 +10,10 @@ posées :
    (Claude/Gemini/GPT/Kimi), branchée par **injection de dépendance** ;
 4. une **transcription** optionnelle (Voie 6 / Whisper) — l'« oreille », avec
    **repli propre** si Whisper n'est pas installé.
+5. un **processus de décision mesuré** — on ne tranche que sur du **réalisé ET
+   mesuré** (meilleure valeur, pas l'avis ; override explicite du Créateur) ;
+6. un **dosage d'intensité** — le palier **le moins cher qui suffit**
+   (SOLO/DUO/CONSEIL), vérificateur **toujours** distinct du constructeur.
 
 > **Honnêteté technique.** Les organes 96/97/98 sont ici des **stubs** (amorces)
 > destinés à être remplacés. Le vrai apport, c'est la **mécanique de boucle
@@ -45,10 +49,14 @@ backend/
 ├── filtre_admission.py          # (b) filtre d'admission de 96 (formule du conseil inter-systèmes)
 ├── moteur.py                    # (Voie 5) IA interchangeable : Moteur / MoteurMock / AdaptateurAPI
 ├── transcription.py             # (Voie 6) oreille Whisper, repli propre si absent
+├── processus_decision.py        # (c) décision mesurée : ne tranche que sur réalisé+mesuré
+├── orchestrateur_intensite.py   # (d) dosage d'intensité : SOLO/DUO/CONSEIL, le moins cher qui suffit
 ├── tests/
-│   ├── test_filtre_admission.py # tests pytest du filtre d'admission
-│   ├── test_moteur.py           # tests pytest du moteur (mock déterministe, clé absente…)
-│   └── test_transcription.py    # tests pytest de la transcription (repli)
+│   ├── test_filtre_admission.py        # tests pytest du filtre d'admission
+│   ├── test_moteur.py                  # tests pytest du moteur (mock déterministe, clé absente…)
+│   ├── test_transcription.py           # tests pytest de la transcription (repli)
+│   ├── test_processus_decision.py      # tests de la décision mesurée (+ garde-fous)
+│   └── test_orchestrateur_intensite.py # tests du dosage d'intensité (+ garde-fous)
 ├── README.md                    # ce fichier
 ├── conftest.py                  # rend backend/ importable par pytest
 ├── requirements-dev.txt         # dépendance de dev unique : pytest
@@ -208,7 +216,58 @@ else:
 
 ---
 
-## 7. Comment lancer
+## 7. Le processus de décision mesuré (`processus_decision.py`)
+
+`decider(options)` tranche entre des options — `option = {label, valeur (0..1 ou
+None = non mesuré), realise}` — sur une règle simple : **on ne tranche que sur du
+réalisé ET mesuré**.
+
+- **Rien de prêt → on ne tranche pas.** Si aucune option n'est *réalisée ET
+  mesurée*, le statut est `incomplet`, message :
+  « **processus incomplet : réaliser et mesurer d'abord** ».
+- **La meilleure valeur gagne — pas l'avis.** Entre options prêtes, la plus haute
+  `valeur` l'emporte (un éventuel champ « avis » est **ignoré**).
+- **Activer / archiver, réversible.** Le gagnant est **activé**, les autres
+  **archivés** — *rien n'est supprimé*, tout est réversible.
+- **Droits.** Si la décision **touche l'écosystème**, l'autorité est le **système**
+  (la valeur mesurée, pas l'opinion). Le **Créateur** peut **override
+  explicitement** (couche méta) : honoré, **tracé** et réversible.
+
+> **Canon (SSOT, non dupliqué).** P3 (excellence *mesurable*), P6 (réversibilité),
+> P7 (autorisation) — `…/connaissances/architecture/principles.md`. **Honnêteté
+> (P8) :** c'est une **logique de tranche**, pas un organe autonome ;
+> « activer/archiver » = décisions, pas un effet matériel.
+
+---
+
+## 8. Le dosage d'intensité (`orchestrateur_intensite.py`)
+
+`recommander(tache, difficulte, enjeu, reversible, nouveaute)` renvoie le **palier
+le moins cher qui suffit**, son plan de ressources et un coût en **ordres de
+grandeur** :
+
+| Palier | Quand | Ressources | Orchestration |
+| ------ | ----- | ---------- | ------------- |
+| **SOLO** | facile **et** réversible **et** enjeu bas | bâtisseur + relecteur indépendant | **0** (aucun surcoût) |
+| **DUO** | cas intermédiaire (par défaut) | bâtisseur + vérificateur pair | faible |
+| **CONSEIL** | **dur ET** (enjeu haut **ou** irréversible **ou** nouveauté forte) | conseil (3) + arbitre indépendant | élevée |
+
+- **Le vérificateur est TOUJOURS une ressource différente du constructeur**
+  (garde-fou invariant, vérifié sur toute la grille d'entrées).
+- **Coût séparé production / orchestration** : `production = base(difficulté) ×
+  facteur_palier`, `orchestration` propre au palier. Ce sont des **ordres de
+  grandeur relatifs**, **pas une facture**. À difficulté égale :
+  **SOLO < DUO < CONSEIL** (« la moins chère qui suffit »).
+- Entrées tolérantes : niveau par mot-clé (« facile / dur / haut »…), entier
+  `1..3` ou flottant `[0,1]`.
+
+> **Canon (SSOT, non dupliqué).** P5 (simplicité — le moins cher qui suffit), P3
+> (vérificateur indépendant), P8 (analogies, pas d'agents parallèles réels) —
+> `…/connaissances/architecture/principles.md`.
+
+---
+
+## 9. Comment lancer
 
 ### Lancer la boucle
 
@@ -246,15 +305,18 @@ pip install -r backend/requirements-dev.txt   # installe pytest (dev uniquement)
 python3 -m pytest backend/tests -q
 ```
 
-Résultat attendu : **`20 passed`**. Couverture : filtre d'admission
+Résultat attendu : **`51 passed`**. Couverture : filtre d'admission
 (périphérique rejeté, central retenu, file saturée, budget, coût nul, tri),
 moteur (mock déterministe, interface abstraite, **clé absente → erreur claire**,
 extraction OpenAI, injection dans l'orchestrateur), transcription (repli propre,
-mode strict, fichier absent).
+mode strict, fichier absent), **décision mesurée** (refus sur non-mesuré, meilleure
+valeur ≠ avis, activer/archiver réversible, override Créateur tracé), **dosage
+d'intensité** (SOLO/DUO/CONSEIL, vérificateur ≠ constructeur sur toute la grille,
+SOLO sans surcoût, ordre SOLO < DUO < CONSEIL).
 
 ---
 
-## 8. Ce qui reste à faire
+## 10. Ce qui reste à faire
 
 - **Remplacer les stubs** 96/97/98 par les vrais organes (exécution réelle de
   97, vérification riche de 96, politique de veto de 98).
@@ -270,4 +332,6 @@ mode strict, fichier absent).
 - **Observabilité** : métriques (taux d'admission, budget consommé, vetos),
   rotation du journal.
 - **Robustesse** : reprise après corruption, verrouillage multi-boucles.
-```
+- **Brancher la décision et le dosage dans la boucle** : `processus_decision` et
+  `orchestrateur_intensite` sont pour l'instant des **modules autonomes** (logique
+  + tests verts), pas encore câblés dans l'orchestrateur 95→98.
