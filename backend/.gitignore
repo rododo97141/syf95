@@ -1,5 +1,7 @@
 # État généré par l'orchestrateur (mémoire de la boucle) — ne pas versionner
 etat_boucle.json
+# Journal des décisions remontées par 96 (trace JSONL / « compteur ») — généré
+journal_decisions.jsonl
 *.tmp
 
 # Caches Python / pytest
