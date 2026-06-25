@@ -17,13 +17,22 @@ Règles posées par le conseil inter-systèmes :
      limité — garde-fou anti-emballement de la boucle auto-mandatée.
   4. Sous le seuil → l'écart est ARCHIVÉ sans alerter 95 (silencieux).
 
-Aucune dépendance externe : bibliothèque standard uniquement.
+Chemin consultatif (96 → évaluateur) : lorsqu'une décision présente plusieurs
+options concurrentes avec des comparaisons par paires, 96 appelle l'évaluateur
+consultatif (`evaluateur_ouvert.recommander_par_preferences`) et INTÈGRE sa sortie
+comme RECOMMANDATION — 96 propose, ne décide jamais (`decide=False`). Sans
+comparaison, le comportement est inchangé (rétro-compatible). Voir
+`FiltreAdmission.remonter_decision`.
+
+Dépendances : bibliothèque standard uniquement (l'évaluateur est un module local du backend).
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
+
+from evaluateur_ouvert import recommander_par_preferences
 
 
 class Decision(Enum):
@@ -185,3 +194,55 @@ class FiltreAdmission:
         admis = [r for r in resultats if r.decision is Decision.ADMIS]
         admis.sort(key=lambda r: r.priorite, reverse=True)
         return admis
+
+    def remonter_decision(
+        self,
+        options,
+        comparaisons=None,
+        *,
+        identifiant: str = "decision",
+        libelle: str = "",
+    ) -> dict:
+        """
+        96 remonte vers 95 une DÉCISION à options concurrentes — sans jamais trancher.
+
+        Chemin consultatif (nouveau) : si des `comparaisons` par paires
+        (« gagnant > perdant ») sont fournies, 96 appelle l'évaluateur consultatif
+        `recommander_par_preferences(options, comparaisons)` et INTÈGRE sa sortie
+        comme RECOMMANDATION. **96 propose, ne décide jamais** : la sortie porte
+        `decide=False` au niveau de 96 ET de la recommandation intégrée.
+
+        Rétro-compatibilité : sans comparaison (None ou liste vide), 96 se comporte
+        comme avant — il remonte les options brutes, **sans** appeler l'évaluateur et
+        **sans** recommandation.
+
+        :returns: dict JSON-sérialisable prêt à remonter à 95.
+        """
+        options = list(options)
+        sortie = {
+            "organe": "96",
+            "type": "decision_multi_options",
+            "identifiant": identifiant,
+            "libelle": libelle,
+            "options": options,
+            "decide": False,            # 96 propose, ne décide JAMAIS
+            "consulte_evaluateur": False,
+            "recommandation": None,
+            "motif": "",
+        }
+        if comparaisons:  # chemin consultatif : 96 APPELLE l'évaluateur
+            recommandation = recommander_par_preferences(options, comparaisons)
+            # Invariant : l'évaluateur ne décide jamais non plus.
+            assert recommandation.get("decide") is False
+            sortie["consulte_evaluateur"] = True
+            sortie["recommandation"] = recommandation
+            sortie["motif"] = (
+                "Comparaisons fournies → 96 a consulté l'évaluateur et remonte sa "
+                "RECOMMANDATION à 95 (96 ne décide pas)."
+            )
+        else:  # rétro-compatible : comportement strictement inchangé
+            sortie["motif"] = (
+                "Aucune comparaison → 96 remonte les options brutes à 95 "
+                "(comportement inchangé, sans recommandation)."
+            )
+        return sortie

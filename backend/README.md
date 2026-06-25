@@ -303,6 +303,25 @@ reco = recommander_par_preferences(["A", "B", "C"], comparaisons)
 #         p, cycles, divergence{separation,bt_vs_copeland,…}, avertissements, …}
 ```
 
+**Câblé dans 96 (stub levé).** L'organe 96 **appelle** réellement l'évaluateur via
+`FiltreAdmission.remonter_decision(options, comparaisons)` : quand une décision
+présente plusieurs options concurrentes **avec des comparaisons par paires**, 96
+**intègre** la sortie de `recommander_par_preferences` comme **recommandation** dans
+ce qu'il remonte à 95 (`decide=False` au niveau de 96 **et** de la recommandation).
+**Sans comparaison**, 96 se comporte comme avant (rétro-compatible : aucun appel,
+aucune recommandation).
+
+```python
+from filtre_admission import FiltreAdmission
+
+f = FiltreAdmission(seuil_base=50, capacite_file=10, budget_generation=1)
+sortie = f.remonter_decision(["A", "B", "C"], comparaisons)   # 96 consulte l'évaluateur
+# sortie = {organe:"96", decide:False, consulte_evaluateur:True,
+#           recommandation:{… decide:False …}, options, motif}
+brut = f.remonter_decision(["A", "B", "C"])                   # rétro-compatible
+# brut["consulte_evaluateur"] is False ; brut["recommandation"] is None
+```
+
 > **Canon (SSOT, non dupliqué).** P3 (n'affirmer que ce que les données
 > permettent : séparation ⇒ on ne chiffre pas), P8 (agrégation **≠** mesure ;
 > « évaluateur » = un calcul, pas un agent) — `…/architecture/principles.md`.
@@ -347,7 +366,7 @@ pip install -r backend/requirements-dev.txt   # installe pytest (dev uniquement)
 python3 -m pytest backend/tests -q
 ```
 
-Résultat attendu : **`65 passed`**. Couverture : filtre d'admission
+Résultat attendu : **`72 passed`**. Couverture : filtre d'admission
 (périphérique rejeté, central retenu, file saturée, budget, coût nul, tri),
 moteur (mock déterministe, interface abstraite, **clé absente → erreur claire**,
 extraction OpenAI, injection dans l'orchestrateur), transcription (repli propre,
@@ -356,7 +375,9 @@ valeur ≠ avis, activer/archiver réversible, override Créateur tracé), **dos
 d'intensité** (SOLO/DUO/CONSEIL, vérificateur ≠ constructeur sur toute la grille,
 SOLO sans surcoût, ordre SOLO < DUO < CONSEIL), **évaluateur consultatif**
 (séparation signalée → `p=None`, cycle détecté comme signal, divergence BT/Copeland
-signalée, transitif bruité concordant, recommandation jamais décision).
+signalée, transitif bruité concordant, recommandation jamais décision), **câblage
+96 → évaluateur** (96 appelle l'évaluateur et expose la recommandation sans trancher,
+cas sans comparaisons inchangé, signaux cycle/séparation remontés).
 
 ---
 
@@ -376,10 +397,10 @@ signalée, transitif bruité concordant, recommandation jamais décision).
 - **Observabilité** : métriques (taux d'admission, budget consommé, vetos),
   rotation du journal.
 - **Robustesse** : reprise après corruption, verrouillage multi-boucles.
-- **Brancher la décision, le dosage et l'évaluateur dans la boucle** :
-  `processus_decision`, `orchestrateur_intensite` et `evaluateur_ouvert` sont pour
-  l'instant des **modules autonomes** (logique + tests verts), pas encore câblés
-  dans l'orchestrateur 95→98 ni dans l'escalade réelle de 96.
+- **Évaluateur câblé dans 96** ✅ : 96 appelle `evaluateur_ouvert` via
+  `FiltreAdmission.remonter_decision` (recommandation, `decide=False`). **Reste** à
+  câbler `processus_decision` et `orchestrateur_intensite` dans la boucle 95→98, puis
+  à faire remonter la sortie de 96 jusqu'à l'exécution réelle de 97.
 - **Évaluateur** : intervalles de confiance sur les forces Bradley-Terry,
   pondération/décote temporelle des comparaisons, détecteur de préférences réel
   (aujourd'hui les comparaisons sont fournies en entrée).
