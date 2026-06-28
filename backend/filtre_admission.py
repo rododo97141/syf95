@@ -17,13 +17,34 @@ Règles posées par le conseil inter-systèmes :
      limité — garde-fou anti-emballement de la boucle auto-mandatée.
   4. Sous le seuil → l'écart est ARCHIVÉ sans alerter 95 (silencieux).
 
-Aucune dépendance externe : bibliothèque standard uniquement.
+Chemin consultatif (96 → évaluateur) : lorsqu'une décision présente plusieurs
+options concurrentes avec des comparaisons par paires, 96 appelle l'évaluateur
+consultatif (`evaluateur_ouvert.recommander_par_preferences`) et INTÈGRE sa sortie
+comme RECOMMANDATION — 96 propose, ne décide jamais (`decide=False`). Sans
+comparaison, le comportement est inchangé (rétro-compatible). Voir
+`FiltreAdmission.remonter_decision`.
+
+Dépendances : bibliothèque standard uniquement (l'évaluateur est un module local du backend).
 """
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from enum import Enum
+from pathlib import Path
+from typing import Any, Optional
+
+from evaluateur_ouvert import recommander_par_preferences
+
+#: Journal JSONL par défaut : une ligne par décision remontée (future « ligne du
+#: compteur » servant à mesurer si l'évaluateur change une vraie décision).
+JOURNAL_DEFAUT = Path(__file__).resolve().parent / "journal_decisions.jsonl"
+
+
+def _horodatage() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
 class Decision(Enum):
@@ -111,6 +132,8 @@ class FiltreAdmission:
       - capacite_file     : taille de file considérée comme « pleine ».
       - budget_generation : nombre de CRÉATIONS encore autorisées.
       - coef_saturation   : intensité de la montée du seuil sous charge.
+      - chemin_journal    : fichier JSONL où tracer les décisions remontées
+                            (défaut : `JOURNAL_DEFAUT`). Voir `remonter_decision`.
 
     Le filtre conserve deux journaux : les écarts `admis` et les `archive`s,
     utiles pour l'audit (96 voit tout, n'escalade que l'essentiel vers 95).
@@ -120,6 +143,7 @@ class FiltreAdmission:
     capacite_file: int
     budget_generation: int
     coef_saturation: float = 1.0
+    chemin_journal: Optional[Path] = None  # journal JSONL des décisions (défaut : JOURNAL_DEFAUT)
     admis: list = field(default_factory=list)
     archive: list = field(default_factory=list)
 
@@ -185,3 +209,95 @@ class FiltreAdmission:
         admis = [r for r in resultats if r.decision is Decision.ADMIS]
         admis.sort(key=lambda r: r.priorite, reverse=True)
         return admis
+
+    def remonter_decision(
+        self,
+        options,
+        comparaisons=None,
+        *,
+        identifiant: str = "decision",
+        libelle: str = "",
+        suivi: Any = None,
+        journal=None,
+    ) -> dict:
+        """
+        96 remonte vers 95 une DÉCISION à options concurrentes — sans jamais trancher.
+
+        Chemin consultatif : si des `comparaisons` par paires (« gagnant > perdant »)
+        sont fournies, 96 appelle `recommander_par_preferences(options, comparaisons)`
+        et INTÈGRE sa sortie comme RECOMMANDATION. **96 propose, ne décide jamais**
+        (`decide=False`) et **n'obéit pas automatiquement** à l'évaluateur : il **logue**
+        la reco, il ne la suit pas.
+
+        Rétro-compatibilité : sans comparaison (None / liste vide), 96 se comporte
+        comme avant — pas d'appel à l'évaluateur, pas de recommandation.
+
+        **Trace persistante (à CHAQUE appel).** Une ligne JSONL est ajoutée au journal
+        (`journal` > `self.chemin_journal` > `JOURNAL_DEFAUT`) : c'est la future ligne
+        du « compteur » pour mesurer si l'évaluateur change une vraie décision. Elle
+        logue la décision, les options, le **classement rendu par l'évaluateur**, et
+        `suivi` = ce qui a été **réellement suivi** (None tant que 96 ne fait que
+        recommander ; renseigné plus tard par la boucle décisionnelle).
+
+        :returns: dict prêt à remonter à 95 (inclut `trace` = la ligne écrite et
+            `journal` = le chemin du journal).
+        """
+        options = list(options)
+        sortie = {
+            "organe": "96",
+            "type": "decision_multi_options",
+            "identifiant": identifiant,
+            "libelle": libelle,
+            "options": options,
+            "decide": False,            # 96 propose, ne décide JAMAIS
+            "consulte_evaluateur": False,
+            "recommandation": None,
+            "motif": "",
+        }
+        if comparaisons:  # chemin consultatif : 96 APPELLE l'évaluateur
+            recommandation = recommander_par_preferences(options, comparaisons)
+            # Invariant : l'évaluateur ne décide jamais non plus.
+            assert recommandation.get("decide") is False
+            sortie["consulte_evaluateur"] = True
+            sortie["recommandation"] = recommandation
+            sortie["motif"] = (
+                "Comparaisons fournies → 96 a consulté l'évaluateur et remonte sa "
+                "RECOMMANDATION à 95 (96 logue, n'obéit pas : decide=False)."
+            )
+        else:  # rétro-compatible : comportement strictement inchangé
+            sortie["motif"] = (
+                "Aucune comparaison → 96 remonte les options brutes à 95 "
+                "(comportement inchangé, sans recommandation)."
+            )
+
+        # TRACE persistante JSONL — écrite à chaque appel (le « compteur »).
+        chemin = Path(journal) if journal else (self.chemin_journal or JOURNAL_DEFAUT)
+        sortie["trace"] = self._tracer(sortie, suivi=suivi, chemin=chemin)
+        sortie["journal"] = str(chemin)
+        return sortie
+
+    def _tracer(self, sortie: dict, *, suivi: Any, chemin: Path) -> dict:
+        """Construit la ligne de trace d'une décision et l'ÉCRIT (append JSONL)."""
+        reco = sortie.get("recommandation")
+        verdict = reco["verdict"] if reco else None
+        entree = {
+            "horodatage": _horodatage(),
+            "identifiant": sortie["identifiant"],
+            "libelle": sortie["libelle"],
+            "decide": False,  # 96 ne décide jamais (même si 'suivi' est renseigné ensuite)
+            "consulte_evaluateur": sortie["consulte_evaluateur"],
+            "options": sortie["options"],
+            "classement": verdict["classement"] if verdict else None,
+            "tete_recommandee": verdict["tete"] if verdict else None,
+            "confiance": verdict["confiance"] if verdict else None,
+            "signaux": {
+                "cycles": len(reco["cycles"]) if reco else 0,
+                "separation": reco["divergence"]["separation"] if reco else False,
+                "bt_vs_copeland": reco["divergence"]["bt_vs_copeland"] if reco else False,
+            },
+            "suivi": suivi,  # ce qui a été RÉELLEMENT suivi (None = pas encore renseigné)
+        }
+        chemin.parent.mkdir(parents=True, exist_ok=True)
+        with chemin.open("a", encoding="utf-8") as flux:
+            flux.write(json.dumps(entree, ensure_ascii=False) + "\n")
+        return entree
