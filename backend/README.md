@@ -10,6 +10,13 @@ posées :
    (Claude/Gemini/GPT/Kimi), branchée par **injection de dépendance** ;
 4. une **transcription** optionnelle (Voie 6 / Whisper) — l'« oreille », avec
    **repli propre** si Whisper n'est pas installé.
+5. un **processus de décision mesuré** — on ne tranche que sur du **réalisé ET
+   mesuré** (meilleure valeur, pas l'avis ; override explicite du Créateur) ;
+6. un **dosage d'intensité** — le palier **le moins cher qui suffit**
+   (SOLO/DUO/CONSEIL), vérificateur **toujours** distinct du constructeur.
+7. un **évaluateur de tâches ouvertes** — **filtre consultatif de 96** : agrège des
+   préférences (Bradley-Terry + Copeland), **signale** séparation, cycles et
+   divergences ; **recommande, ne décide jamais**.
 
 > **Honnêteté technique.** Les organes 96/97/98 sont ici des **stubs** (amorces)
 > destinés à être remplacés. Le vrai apport, c'est la **mécanique de boucle
@@ -26,7 +33,7 @@ posées :
 | Organe | Rôle | Dans ce backend |
 | ------ | ---- | --------------- |
 | **95** | pense / planifie | construit ou recharge le plan de tâches |
-| **96** | analyse — « voit pour agir » | vérifie + **filtre d'admission** (auto-mandat) |
+| **96** | analyse — « voit pour agir » | vérifie + **filtre d'admission** (auto-mandat) + **évaluateur consultatif** (propose, ne décide jamais) |
 | **97** | agit | exécute une tâche **via un `Moteur` injecté** (IA interchangeable) |
 | **98** | immunité / sécurité — **droit de veto** | bloque une action sensible non autorisée |
 | **mémoire** | persistance | le fichier d'état **JSON** de la boucle |
@@ -45,10 +52,16 @@ backend/
 ├── filtre_admission.py          # (b) filtre d'admission de 96 (formule du conseil inter-systèmes)
 ├── moteur.py                    # (Voie 5) IA interchangeable : Moteur / MoteurMock / AdaptateurAPI
 ├── transcription.py             # (Voie 6) oreille Whisper, repli propre si absent
+├── processus_decision.py        # (c) décision mesurée : ne tranche que sur réalisé+mesuré
+├── orchestrateur_intensite.py   # (d) dosage d'intensité : SOLO/DUO/CONSEIL, le moins cher qui suffit
+├── evaluateur_ouvert.py         # (e) filtre consultatif de 96 : Bradley-Terry + Copeland, signaux
 ├── tests/
-│   ├── test_filtre_admission.py # tests pytest du filtre d'admission
-│   ├── test_moteur.py           # tests pytest du moteur (mock déterministe, clé absente…)
-│   └── test_transcription.py    # tests pytest de la transcription (repli)
+│   ├── test_filtre_admission.py        # tests pytest du filtre d'admission
+│   ├── test_moteur.py                  # tests pytest du moteur (mock déterministe, clé absente…)
+│   ├── test_transcription.py           # tests pytest de la transcription (repli)
+│   ├── test_processus_decision.py      # tests de la décision mesurée (+ garde-fous)
+│   ├── test_orchestrateur_intensite.py # tests du dosage d'intensité (+ garde-fous)
+│   └── test_evaluateur_ouvert.py       # tests de l'évaluateur (séparation, cycle, divergence)
 ├── README.md                    # ce fichier
 ├── conftest.py                  # rend backend/ importable par pytest
 ├── requirements-dev.txt         # dépendance de dev unique : pytest
@@ -208,7 +221,95 @@ else:
 
 ---
 
-## 7. Comment lancer
+## 7. Le processus de décision mesuré (`processus_decision.py`)
+
+`decider(options)` tranche entre des options — `option = {label, valeur (0..1 ou
+None = non mesuré), realise}` — sur une règle simple : **on ne tranche que sur du
+réalisé ET mesuré**.
+
+- **Rien de prêt → on ne tranche pas.** Si aucune option n'est *réalisée ET
+  mesurée*, le statut est `incomplet`, message :
+  « **processus incomplet : réaliser et mesurer d'abord** ».
+- **La meilleure valeur gagne — pas l'avis.** Entre options prêtes, la plus haute
+  `valeur` l'emporte (un éventuel champ « avis » est **ignoré**).
+- **Activer / archiver, réversible.** Le gagnant est **activé**, les autres
+  **archivés** — *rien n'est supprimé*, tout est réversible.
+- **Droits.** Si la décision **touche l'écosystème**, l'autorité est le **système**
+  (la valeur mesurée, pas l'opinion). Le **Créateur** peut **override
+  explicitement** (couche méta) : honoré, **tracé** et réversible.
+
+> **Canon (SSOT, non dupliqué).** P3 (excellence *mesurable*), P6 (réversibilité),
+> P7 (autorisation) — `…/connaissances/architecture/principles.md`. **Honnêteté
+> (P8) :** c'est une **logique de tranche**, pas un organe autonome ;
+> « activer/archiver » = décisions, pas un effet matériel.
+
+---
+
+## 8. Le dosage d'intensité (`orchestrateur_intensite.py`)
+
+`recommander(tache, difficulte, enjeu, reversible, nouveaute)` renvoie le **palier
+le moins cher qui suffit**, son plan de ressources et un coût en **ordres de
+grandeur** :
+
+| Palier | Quand | Ressources | Orchestration |
+| ------ | ----- | ---------- | ------------- |
+| **SOLO** | facile **et** réversible **et** enjeu bas | bâtisseur + relecteur indépendant | **0** (aucun surcoût) |
+| **DUO** | cas intermédiaire (par défaut) | bâtisseur + vérificateur pair | faible |
+| **CONSEIL** | **dur ET** (enjeu haut **ou** irréversible **ou** nouveauté forte) | conseil (3) + arbitre indépendant | élevée |
+
+- **Le vérificateur est TOUJOURS une ressource différente du constructeur**
+  (garde-fou invariant, vérifié sur toute la grille d'entrées).
+- **Coût séparé production / orchestration** : `production = base(difficulté) ×
+  facteur_palier`, `orchestration` propre au palier. Ce sont des **ordres de
+  grandeur relatifs**, **pas une facture**. À difficulté égale :
+  **SOLO < DUO < CONSEIL** (« la moins chère qui suffit »).
+- Entrées tolérantes : niveau par mot-clé (« facile / dur / haut »…), entier
+  `1..3` ou flottant `[0,1]`.
+
+> **Canon (SSOT, non dupliqué).** P5 (simplicité — le moins cher qui suffit), P3
+> (vérificateur indépendant), P8 (analogies, pas d'agents parallèles réels) —
+> `…/connaissances/architecture/principles.md`.
+
+---
+
+## 9. L'évaluateur de tâches ouvertes (`evaluateur_ouvert.py`)
+
+**Filtre consultatif de l'organe 96.** À partir de comparaisons par paires
+« gagnant > perdant », il **agrège des préférences** et **propose** — **96 propose,
+ne décide jamais**. La sortie est une **recommandation** (`decide=False`), pas une
+décision.
+
+> **Axiome (gravé en docstring).** On **agrège des préférences**, on ne **mesure
+> pas un réel** : « A > B » est un *jugement*, pas une mesure. Donc **baseline
+> forte, jamais d'homme de paille** ; et on **refuse de chiffrer** ce qui n'existe
+> pas (si le MLE diverge, on le **signale**). *(À distinguer de
+> `processus_decision.py`, qui, lui, tranche sur de la **valeur mesurée**.)*
+
+Trois lectures du même jeu de préférences :
+
+| Lecture | Donne | Garde-fou |
+| ------- | ----- | --------- |
+| **Bradley-Terry** | force latente + `P(A>B)` | **séparation** détectée (condition de Ford : graphe de dominance fortement connexe) → sinon **divergence signalée**, `p=None` |
+| **Copeland** | classement ordinal (`#battus − #perdants`) | robuste aux marges **et aux cycles** |
+| **Cycles** | clusters intransitifs (A>B>C>A) | rapportés comme **SIGNAL**, pas du bruit |
+| **Alerte** | désaccord **BT vs Copeland** en tête | `divergence.bt_vs_copeland = true` |
+
+```python
+from evaluateur_ouvert import recommander_par_preferences
+
+comparaisons = [("A", "B"), ("A", "B"), ("B", "C"), ("A", "C")]  # gagnant > perdant
+reco = recommander_par_preferences(["A", "B", "C"], comparaisons)
+# reco = {nature:"recommandation", decide:False, verdict{classement,tete,confiance},
+#         p, cycles, divergence{separation,bt_vs_copeland,…}, avertissements, …}
+```
+
+> **Canon (SSOT, non dupliqué).** P3 (n'affirmer que ce que les données
+> permettent : séparation ⇒ on ne chiffre pas), P8 (agrégation **≠** mesure ;
+> « évaluateur » = un calcul, pas un agent) — `…/architecture/principles.md`.
+
+---
+
+## 10. Comment lancer
 
 ### Lancer la boucle
 
@@ -246,15 +347,20 @@ pip install -r backend/requirements-dev.txt   # installe pytest (dev uniquement)
 python3 -m pytest backend/tests -q
 ```
 
-Résultat attendu : **`20 passed`**. Couverture : filtre d'admission
+Résultat attendu : **`65 passed`**. Couverture : filtre d'admission
 (périphérique rejeté, central retenu, file saturée, budget, coût nul, tri),
 moteur (mock déterministe, interface abstraite, **clé absente → erreur claire**,
 extraction OpenAI, injection dans l'orchestrateur), transcription (repli propre,
-mode strict, fichier absent).
+mode strict, fichier absent), **décision mesurée** (refus sur non-mesuré, meilleure
+valeur ≠ avis, activer/archiver réversible, override Créateur tracé), **dosage
+d'intensité** (SOLO/DUO/CONSEIL, vérificateur ≠ constructeur sur toute la grille,
+SOLO sans surcoût, ordre SOLO < DUO < CONSEIL), **évaluateur consultatif**
+(séparation signalée → `p=None`, cycle détecté comme signal, divergence BT/Copeland
+signalée, transitif bruité concordant, recommandation jamais décision).
 
 ---
 
-## 8. Ce qui reste à faire
+## 11. Ce qui reste à faire
 
 - **Remplacer les stubs** 96/97/98 par les vrais organes (exécution réelle de
   97, vérification riche de 96, politique de veto de 98).
@@ -270,4 +376,10 @@ mode strict, fichier absent).
 - **Observabilité** : métriques (taux d'admission, budget consommé, vetos),
   rotation du journal.
 - **Robustesse** : reprise après corruption, verrouillage multi-boucles.
-```
+- **Brancher la décision, le dosage et l'évaluateur dans la boucle** :
+  `processus_decision`, `orchestrateur_intensite` et `evaluateur_ouvert` sont pour
+  l'instant des **modules autonomes** (logique + tests verts), pas encore câblés
+  dans l'orchestrateur 95→98 ni dans l'escalade réelle de 96.
+- **Évaluateur** : intervalles de confiance sur les forces Bradley-Terry,
+  pondération/décote temporelle des comparaisons, détecteur de préférences réel
+  (aujourd'hui les comparaisons sont fournies en entrée).
