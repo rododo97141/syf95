@@ -591,3 +591,67 @@ Cohérence vérifiée :
 - Valeur I (barrières dures) : le videur 1 est ce qui les rend RÉELLES (un mécanisme qui bloque, pas juste une règle écrite).
 - Valeur G (catégories) : videur 1 = légende/créateur (intouchable) ; videur 2 = star (modifiable).
 - Valeur F (ligues) + B (boucle vivante) : le videur 2 est un terrain pour observer la progression/évolution réelle d'un organe du système.
+
+## VALEUR L — L'information nourrit la valeur : récolter avant de juger (VALIDÉ)
+
+(Énoncé par Kily au moment de décider du sort de #25 : « il faut qu'on récupère le plus d'informations possible pour savoir si la valeur qu'on évalue est sûre ».)
+
+**Le principe**
+
+Plus on récolte d'information sur quelque chose, plus on peut juger SÛREMENT de sa valeur. L'information est de la NOURRITURE (lien Valeur I, image des deux systèmes : celui qui se nourrit le plus gagne ; données = carburant, Valeur E).
+
+- Avant de juger la valeur de quoi que ce soit (une méthode, une source, un organe, un document, une décision), CHERCHER le maximum d'information dessus. Ne pas trancher avec peu d'information.
+- Une décision prise avec PEU d'information est risquée ; une décision prise avec BEAUCOUP d'information est solide.
+- Plus d'information sert DEUX choses à la fois :
+  1. Un jugement plus sûr (la confiance monte avec l'information — lien direct Valeur J : le niveau de confiance dépend de la quantité/qualité d'information).
+  2. Plus de matière pour la CRÉATIVITÉ (avec plus d'infos, on voit plus de combinaisons possibles — lien point 6, combiner les méthodes).
+
+**Pourquoi les boucles, les multi-systèmes, la créativité existent**
+
+C'est précisément pour ça que NEXUS a des boucles, plusieurs organes/systèmes, la confrontation de sources, la créativité : tout cet appareil sert à RÉCOLTER ET TRAITER de l'information en continu. L'information n'est pas un à-côté, c'est le carburant de tout le système.
+
+**Règle pratique**
+
+Chercher l'information de la façon la plus large possible (multi-sources, multi-angles — Point 9), PUIS la traiter avec les valeurs (la juger, la confronter, la classer). Récolter large d'abord, juger ensuite.
+
+**Cohérence**
+
+- = Point 9 (expérience vivante : multi-sources, multi-hypothèses) → c'est la méthode de récolte.
+- = Valeur J (confiance déclarée) → l'information fait monter la confiance ; juger sans assez d'information = supposer, pas savoir.
+- = Valeur E / « données = carburant » → l'information nourrit l'attention et les organes.
+- = serrurier → comprendre à fond (donc s'informer à fond) avant d'agir.
+
+## VALEUR M — Bien piloter + auto-analyse du système entier, catégorie par catégorie (VALIDÉ)
+
+(Née de l'auto-analyse de Claude + du regard extérieur de Cowork sur cette session. Les défauts trouvés ne doivent pas se perdre dans un rapport : on les transforme en règle enregistrée. Et le principe d'auto-analyse vaut pour TOUT le système, pas seulement le pilotage.)
+
+**Partie 1 — Comment bien piloter** (3 corrections, valables pour toute IA qui pilote : Claude, Cowork, et le système autonome)
+
+1. **Décider seul quand c'est réversible et à faible risque.** Agir, montrer, corriger après si besoin. Ne remonter au créateur (ou demander un choix) que pour l'IRRÉVERSIBLE ou la GRANDE VALEUR. Ne pas sur-déléguer les petites décisions réversibles. (Défaut observé : Claude demandait l'aval même sur du réversible.)
+2. **S'auto-appliquer ses propres règles AVANT d'agir** (préventif, pas réactif). Avant chaque décision, passer une checklist rapide des valeurs concernées : ai-je vérifié au lieu de supposer (J) ? ai-je cherché plusieurs sources (L) ? est-ce que je creuse trop / boucle morte (B) ? est-ce réversible donc je peux décider seul (M-1) ? (Défaut observé : Claude n'appliquait ses règles qu'APRÈS correction de Kily.)
+3. **Multi-sources par défaut.** Ne jamais juger quoi que ce soit sur une seule source. Toujours confronter au réel courant et à plusieurs angles. (Défaut observé : #25 jugé d'abord sur le seul document, sans le confronter au système réel.)
+
+**Partie 2 — L'auto-analyse du SYSTÈME ENTIER, catégorie par catégorie** (le principe général)
+
+Le système (et les IA qui le pilotent) doit régulièrement S'AUTO-ANALYSER, accepter le regard extérieur (avocat du diable, Cowork, autres sources), et transformer ce qu'il trouve en règles/améliorations ENREGISTRÉES (sinon l'information se perd).
+
+MAIS l'auto-analyse ne porte pas sur « tout » en bloc confus — elle se fait CATÉGORIE PAR CATÉGORIE. Ce qu'on vient de faire (analyser le PILOTAGE) n'est qu'UNE catégorie. Il y en aura d'autres, chacune avec ses propres critères. Exemples de catégories (liste ouverte, à compléter) :
+
+- le pilotage (comment les IA décident, ci-dessus) ;
+- les organes (chacun fait-il bien son métier ? doublons ? manques ?) ;
+- la mémoire (saturation, redondance, rangement) ;
+- les sources (classement, dialogue, avocat du diable) ;
+- les méthodes (montent/descendent-elles correctement en force ?) ;
+- les valeurs (se contredisent-elles ? une manque-t-elle ?) ;
+- l'écosystème global (cohérence d'ensemble) ;
+- la sécurité (les barrières tiennent-elles ?).
+
+= c'est l'organisme appliqué à l'auto-observation : on ne fait pas un check-up vague de « tout », on ausculte organe par organe, catégorie par catégorie, chacune avec ses propres critères.
+
+**Cohérence**
+
+- = boucle d'amélioration (Point 6, governance) appliquée à soi-même.
+- = Valeur L : l'auto-analyse est une récolte d'information sur soi → nourrit le système.
+- = avocat du diable (Point 9) : accepter le regard extérieur qui trouve les angles morts qu'on ne voit pas seul.
+- = « rien ne se perd » : transformer ce qu'on trouve en règle enregistrée, pas en rapport oublié.
+- Cas vécu fondateur : l'auto-analyse de Claude (sur le pilotage) + le regard de Cowork ont produit cette Valeur M, et ont aussi détecté que la Valeur L manquait sur GitHub. La méthode a fait ses preuves en direct.
