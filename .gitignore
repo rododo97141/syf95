@@ -12,3 +12,6 @@ ziRTc6q0
 ziTaoMaX
 _tmp_del_test.txt
 *.skill
+
+# Traces runtime (journaux régénérables)
+*.jsonl
