@@ -32,6 +32,7 @@ from pathlib import Path
 
 from filtre_admission import Decision, Ecart, FiltreAdmission
 from moteur import Moteur, MoteurMock
+from orchestrateur_intensite import recommander
 
 # Fichier d'état par défaut : la « mémoire » de la boucle, à côté de ce script.
 ETAT_DEFAUT = Path(__file__).resolve().parent / "etat_boucle.json"
@@ -242,6 +243,19 @@ def tourner(chemin_etat: Path, pas: int | None = None,
             continue  # déjà faite ou bloquée → on saute (c'est la reprise)
         if pas is not None and traitees >= pas:
             break     # quota du passage atteint → on s'arrête proprement
+
+        # Dosage d'intensité (1er organe réel branché) : journalisé,
+        # sans toucher à la forme des tâches ni au contrat d'état JSON.
+        reco = recommander(
+            tache["libelle"],
+            difficulte="moyen",
+            enjeu="fort" if tache["sensible"] else "moyen",
+            reversible=not tache["sensible"],
+            nouveaute="faible",
+        )
+        etat["journal"].append(
+            f"{_horodatage()} · dosage {tache['id']} → {reco['tier']} ({reco['raison']})"
+        )
 
         # 97 agit (via le Moteur injecté).
         resultat = executer_tache(tache, moteur)
