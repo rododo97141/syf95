@@ -18,37 +18,60 @@ ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "memoire_data")
 DIR = os.path.join(ROOT, "capteurs")
 JOURNAL = os.path.join(DIR, "journal.jsonl")
 
+def _chemins():
+    """Chemin du journal des capteurs.
+    Defaut : DIR/JOURNAL (relatif au script) = comportement historique INCHANGE.
+    Si la variable d'env CAPTEURS_ROOT est definie :
+        <CAPTEURS_ROOT>/capteurs/journal.jsonl
+    -> la boucle ecrit ou on veut, et les tests s'isolent sans monkeypatch."""
+    base = os.environ.get("CAPTEURS_ROOT")
+    d = os.path.join(base, "capteurs") if base else DIR
+    return d, os.path.join(d, "journal.jsonl")
+
 STATUTS = ("ok", "partiel", "echec")
 MODES = ("auto", "assiste")
 FEEDBACKS = ("pos", "neg")
 QUALITES = ("validee", "reprise")  # validée du 1er coup, ou a nécessité une reprise
 
-def log(args):
-    os.makedirs(DIR, exist_ok=True)
+def log_event(tache, statut="ok", mode="assiste", duree_min=None, feedback=None,
+              qualite=None, tokens=None, impact=None, difficulte=None, tier=None, note=None):
+    """Ecrit UN capteur (une ligne JSONL) et renvoie l'evenement.
+    Fonction propre, reutilisable par la boucle (mode bibliotheque). Une seule logique d'ecriture."""
+    d, journal = _chemins()
+    os.makedirs(d, exist_ok=True)
     event = {
         "ts": datetime.datetime.now().isoformat(timespec="seconds"),
-        "tache": args.tache,
-        "statut": args.statut,
-        "mode": args.mode,
-        "duree_min": args.duree,
-        "feedback": args.feedback,
-        "qualite": args.qualite,
-        "tokens": args.tokens,   # verbosité : tokens (ou longueur) de SORTIE — efficacité ≠ activité
-        "impact": args.impact,   # Impact_Utilisateur 0..1 : valeur RÉELLE livrée (anti-Goodhart)
-        "difficulte": args.difficulte,  # facile/moyen/dur : pour normaliser le progrès (rigueur)
-        "tier": args.tier,       # intensité d'orchestration RÉELLEMENT utilisée (SOLO/DUO/CONSEIL) — boucle la mesure
-        "note": args.note,
+        "tache": tache,
+        "statut": statut,
+        "mode": mode,
+        "duree_min": duree_min,
+        "feedback": feedback,
+        "qualite": qualite,
+        "tokens": tokens,       # verbosité : tokens (ou longueur) de SORTIE — efficacité ≠ activité
+        "impact": impact,       # Impact_Utilisateur 0..1 : valeur RÉELLE livrée (anti-Goodhart)
+        "difficulte": difficulte,  # facile/moyen/dur : pour normaliser le progrès (rigueur)
+        "tier": tier,           # intensité d'orchestration RÉELLEMENT utilisée (SOLO/DUO/CONSEIL)
+        "note": note,
     }
-    with open(JOURNAL, "a", encoding="utf-8") as f:
+    with open(journal, "a", encoding="utf-8") as f:
         f.write(json.dumps(event, ensure_ascii=False) + "\n")
+    return event
+
+def log(args):
+    event = log_event(
+        tache=args.tache, statut=args.statut, mode=args.mode, duree_min=args.duree,
+        feedback=args.feedback, qualite=args.qualite, tokens=args.tokens,
+        impact=args.impact, difficulte=args.difficulte, tier=args.tier, note=args.note,
+    )
     print(f"🟢 capté : [{event['statut']}/{event['mode']}] {event['tache']}"
           + (f" · feedback {event['feedback']}" if event['feedback'] else ""))
 
 def lire():
-    if not os.path.exists(JOURNAL):
+    _, JOURNAL_ = _chemins()
+    if not os.path.exists(JOURNAL_):
         return []
     out = []
-    for line in open(JOURNAL, encoding="utf-8"):
+    for line in open(JOURNAL_, encoding="utf-8"):
         line = line.strip()
         if line:
             try: out.append(json.loads(line))
