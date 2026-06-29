@@ -1,0 +1,22 @@
+[
+  {"query": "analyse-moi le fichier ventes_T4.xlsx dans mon dossier, sors les 3 produits qui baissent le plus et propose une action concrète pour chacun", "should_trigger": true},
+  {"query": "construis un petit script python qui renomme toutes les photos d'un dossier par date de prise de vue, et teste-le sur un exemple", "should_trigger": true},
+  {"query": "fais une recherche sur les 3 meilleurs CRM pour une TPE de 4 personnes et compare prix et fonctions dans un tableau", "should_trigger": true},
+  {"query": "rédige une note de synthèse d'une page à partir du rapport PDF que je t'ai donné, c'est pour mon directeur lundi", "should_trigger": true},
+  {"query": "j'ai genre 200 lignes de logs d'erreur, regroupe-les par cause et dis-moi les 5 problèmes principaux à régler en priorité", "should_trigger": true},
+  {"query": "monte-moi un plan d'action sur 4 semaines pour lancer ma chaîne youtube, avec les étapes semaine par semaine", "should_trigger": true},
+  {"query": "compare ces deux contrats d'assurance auto et dis-moi lequel est mieux et pourquoi, point par point", "should_trigger": true},
+  {"query": "débugge ce composant react qui se re-render en boucle infinie et explique-moi la cause racine", "should_trigger": true},
+  {"query": "fais-moi un budget prévisionnel sur 12 mois pour un food-truck à partir des chiffres que je te donne", "should_trigger": true},
+  {"query": "analyse la concurrence de mon resto dans un rayon de 2 km et résume les forces et faiblesses de chacun", "should_trigger": true},
+  {"query": "c'est quoi la capitale de l'australie ?", "should_trigger": false},
+  {"query": "résume-moi en une phrase ce qu'est la photosynthèse", "should_trigger": false},
+  {"query": "traduis 'bonjour' en japonais", "should_trigger": false},
+  {"query": "il est quelle heure à tokyo là ?", "should_trigger": false},
+  {"query": "donne-moi un synonyme de 'rapide'", "should_trigger": false},
+  {"query": "ça s'écrit comment 'accueil' ?", "should_trigger": false},
+  {"query": "2400 euros moins 18% ça fait combien ?", "should_trigger": false},
+  {"query": "c'est quoi le raccourci pour coller sans la mise en forme sur mac ?", "should_trigger": false},
+  {"query": "rappelle-moi juste le nom du fichier qu'on a fait tout à l'heure", "should_trigger": false},
+  {"query": "merci, c'est parfait ça", "should_trigger": false}
+]
