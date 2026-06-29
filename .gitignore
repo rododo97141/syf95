@@ -2,3 +2,13 @@
 __pycache__/
 *.pyc
 .pytest_cache/
+
+# Divers : macOS, temporaires, doublons (rapatriement local)
+.DS_Store
+nexus_package/
+*.tombe
+ziPuue2q
+ziRTc6q0
+ziTaoMaX
+_tmp_del_test.txt
+*.skill
