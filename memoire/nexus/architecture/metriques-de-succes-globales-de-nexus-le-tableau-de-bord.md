@@ -1,0 +1,11 @@
+# Metriques de succes globales de NEXUS (le tableau de bord) — domaine: nexus / catégorie: architecture
+> Créé le 22/06/2026 · Dernière mise à jour le 22/06/2026
+
+## En bref
+Metriques succes NEXUS : 3 niveaux (sante 98 / performance / PROGRES). Panier de 5 KPIs (fiabilite, qualite, efficacite, autonomie, SATISFACTION=arbitre ultime), pas une metrique unique (Goodhart). Progres = courbe d apprentissage (erreurs bas, reutilisation haut, autonomie haut). Porte par 96, prerequis = instrumenter (capteurs).
+
+## Détail
+Question de Kily (20/06/2026) : comment sait-on que NEXUS devient MEILLEUR ? Candidats : temps gagne, qualite, taux de reussite, satisfaction, autonomie. Il voit les organes mais pas les indicateurs de l organisme entier. REPONSE EXPERT-95 : distinguer 3 NIVEAUX de mesure (ne pas melanger) : (1) SANTE (98, instantane : ca va bien ?) ; (2) PERFORMANCE (par tache : le travail est-il bon ?) ; (3) PROGRES (dans le temps : devient-on meilleur ? = la question de Kily, la DERIVEE). PIEGE a eviter : metrique unique (loi de Goodhart : quand une mesure devient une cible elle cesse d etre bonne) + metrique facile (tokens) au detriment du vrai (utilite). -> PANIER EQUILIBRE de 5 KPIs (regroupant ses candidats) : (a) Fiabilite = taux de reussite + taux d erreurs ; (b) Qualite = % livrables valides sans reprise + ta note ; (c) Efficacite = temps gagne (estime sans/avec) ; (d) Autonomie = % actions sans intervention de Kily ; (e) SATISFACTION (Kily) = arbitre ULTIME, seule metrique qui capte l utilite reelle (coherent avec le vocal utilite>complexite). META-INDICATEUR DE PROGRES (devenir meilleur) = la courbe d apprentissage : erreurs recurrentes EN BAISSE + methodes/outils REUTILISES (capitalisation) + autonomie EN HAUSSE, a qualite/satisfaction maintenue. On a deja une 1ere preuve (amelioration cumulative entre runs). QUI LE PORTE : fonction de 96 (rapport de tendance dans le temps), PAS un nouvel organe (garde-fou anti-multiplication). PREREQUIS : instrumenter chaque tache (log : reussite, feedback Kily, autonome/assistee, temps) = les capteurs (meme chantier). Commencer par les KPIs faciles a instrumenter (reussite, autonomie) + ton feedback (satisfaction).
+
+## Source
+question Kily + cadre expert-95 20/06/2026

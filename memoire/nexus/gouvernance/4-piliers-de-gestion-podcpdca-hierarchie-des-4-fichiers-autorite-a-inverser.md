@@ -1,0 +1,11 @@
+# 4 piliers de gestion (PODC=PDCA) + hierarchie des 4 fichiers (autorite a inverser) — domaine: nexus / catégorie: gouvernance
+> Créé le 22/06/2026 · Dernière mise à jour le 22/06/2026
+
+## En bref
+4 piliers PODC = bonne fondation ; couples aux organes = cycle PDCA (Plan=95,Do=97,Check=96+98,Act=92). Corriger : Controler=96+98 (pas 97). Hierarchie fichiers : l ordre SKILL-en-haut vaut pour l EXECUTION, mais l AUTORITE doit etre INVERSEE (identity+principles priment sur la technique, cf Constitutional AI).
+
+## Détail
+Kily propose (20/06) : (A) 4 piliers de gestion = Planifier / Organiser-journaliser / Diriger-Piloter / Controler (= modele PODC de Fayol), mappes sur 95 ordonne via 97. (B) Hierarchie de 4 fichiers canoniques : NIVEAU1 SKILL.md (regles techniques/coeur) > NIVEAU2 governance.md (lois operationnelles) > NIVEAU3 principles.md (lignes directrices/ethique) > NIVEAU4 identity.md (posture). AVIS EXPERT-95 : (A) PILIERS = excellente fondation (modele de management universel eprouve). VALEUR AJOUTEE : couples aux organes, les 4 piliers forment le cycle PDCA de Deming (amelioration continue) : Plan=95, Do=97, Check=96+98, Act=92. NEXUS a donc TOUS les elements d un systeme de gestion complet. AJUSTEMENT FRANC du mapping : le pilier CONTROLER n est PAS de l execution (97) - c est de l ANALYSE (96) + SURVEILLANCE (98) qui remontent a 95. Ne pas tout concentrer sur 95-par-97 sinon on perd 96/98/92. Mapping correct : Planifier=95 ; Organiser=outil d organisation+journal (95 priorise) ; Diriger=95 (coordonne) via 97 ; Controler=96+98 -> 95 ; boucler=92. (B) HIERARCHIE FICHIERS = POINT CRITIQUE : l ordre de Kily (SKILL.md au sommet) est l ordre d EXECUTION (le concret tourne en premier) = JUSTE pour l operationnel. MAIS si c est aussi l ordre d AUTORITE (qui prime en cas de conflit), alors c est INVERSE et risque : une regle technique l emporterait sur l ethique/l identite. Bonne pratique (Constitutional AI) : identity + principles = SOCLE qui CONTRAINT la technique. Donc 2 ordres OPPOSES coexistent : EXECUTION = SKILL->governance->principles->identity (concret d abord) ; AUTORITE = identity->principles->governance->SKILL (fondamental prime en cas de conflit). Danger = confondre les deux et laisser SKILL primer sur les valeurs.
+
+## Source
+proposition Kily + avis expert-95 20/06/2026
