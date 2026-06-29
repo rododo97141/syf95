@@ -1,0 +1,975 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NEXUS - L'Écosystème Cognitif Vivant</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Inter & Fira Code Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .code-font {
+            font-family: 'Fira Code', monospace;
+        }
+        /* Custom animations for cybernetic flows */
+        @keyframes pulse-glow-green {
+            0%, 100% { filter: drop-shadow(0 0 2px rgba(16, 185, 129, 0.4)) drop-shadow(0 0 6px rgba(16, 185, 129, 0.2)); }
+            50% { filter: drop-shadow(0 0 8px rgba(16, 185, 129, 0.8)) drop-shadow(0 0 16px rgba(16, 185, 129, 0.4)); }
+        }
+        @keyframes pulse-glow-orange {
+            0%, 100% { filter: drop-shadow(0 0 2px rgba(249, 115, 22, 0.4)) drop-shadow(0 0 6px rgba(249, 115, 22, 0.2)); }
+            50% { filter: drop-shadow(0 0 8px rgba(249, 115, 22, 0.8)) drop-shadow(0 0 16px rgba(249, 115, 22, 0.4)); }
+        }
+        @keyframes pulse-glow-purple {
+            0%, 100% { filter: drop-shadow(0 0 2px rgba(168, 85, 247, 0.4)) drop-shadow(0 0 6px rgba(168, 85, 247, 0.2)); }
+            50% { filter: drop-shadow(0 0 8px rgba(168, 85, 247, 0.8)) drop-shadow(0 0 16px rgba(168, 85, 247, 0.4)); }
+        }
+        @keyframes pulse-glow-blue {
+            0%, 100% { filter: drop-shadow(0 0 2px rgba(59, 130, 246, 0.4)) drop-shadow(0 0 6px rgba(59, 130, 246, 0.2)); }
+            50% { filter: drop-shadow(0 0 8px rgba(59, 130, 246, 0.8)) drop-shadow(0 0 16px rgba(59, 130, 246, 0.4)); }
+        }
+
+        .glow-active-green { animation: pulse-glow-green 1.8s infinite ease-in-out; }
+        .glow-active-orange { animation: pulse-glow-orange 1.8s infinite ease-in-out; }
+        .glow-active-purple { animation: pulse-glow-purple 1.8s infinite ease-in-out; }
+        .glow-active-blue { animation: pulse-glow-blue 1.8s infinite ease-in-out; }
+
+        @keyframes dash {
+            to { stroke-dashoffset: -40; }
+        }
+        .data-flow-animated {
+            stroke-dasharray: 6, 4;
+            animation: dash 1.5s linear infinite;
+        }
+        .grid-bg {
+            background-size: 30px 30px;
+            background-image: linear-gradient(to right, rgba(255, 255, 255, 0.015) 1px, transparent 1px),
+                              linear-gradient(to bottom, rgba(255, 255, 255, 0.015) 1px, transparent 1px);
+        }
+        .transition-all-300 {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col grid-bg overflow-x-hidden selection:bg-emerald-500/30 selection:text-emerald-300">
+
+    <!-- Header principal -->
+    <header class="bg-slate-900/90 backdrop-blur-md border-b border-slate-800/80 py-4 px-6 sticky top-0 z-50 shadow-lg shadow-black/40">
+        <div class="max-w-7xl mx-auto flex flex-col lg:flex-row justify-between items-center gap-4">
+            <div class="flex items-center gap-4">
+                <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-500 via-teal-600 to-indigo-700 flex items-center justify-center shadow-lg shadow-emerald-500/20 relative group">
+                    <span class="text-2xl font-black text-white tracking-widest group-hover:scale-110 transition-transform">N</span>
+                    <div class="absolute -inset-0.5 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-2xl blur opacity-30 group-hover:opacity-60 transition-opacity"></div>
+                </div>
+                <div>
+                    <div class="flex items-center gap-2.5">
+                        <h1 class="text-2xl font-black tracking-tight text-white">NEXUS</h1>
+                        <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 uppercase tracking-widest font-bold">Écosystème Vivant</span>
+                    </div>
+                    <p class="text-xs text-slate-400">Cartographie d'architecture cognitive et d'évolution — Mise à jour validée (23/06/2026)</p>
+                </div>
+            </div>
+
+            <!-- Boutons de filtrage & État global -->
+            <div class="flex flex-wrap items-center gap-3">
+                <div class="flex bg-slate-950 p-1 rounded-xl border border-slate-800">
+                    <button onclick="filterStatus('all')" id="btn-filter-all" class="px-3 py-1.5 rounded-lg text-xs font-semibold tracking-wide transition-all-300 bg-slate-800 text-white">
+                        Tout voir
+                    </button>
+                    <button onclick="filterStatus('place')" id="btn-filter-place" class="px-3 py-1.5 rounded-lg text-xs font-semibold tracking-wide transition-all-300 text-slate-400 hover:text-emerald-400">
+                        🟢 En Place
+                    </button>
+                    <button onclick="filterStatus('construction')" id="btn-filter-construction" class="px-3 py-1.5 rounded-lg text-xs font-semibold tracking-wide transition-all-300 text-slate-400 hover:text-amber-500">
+                        🟡 En Construction
+                    </button>
+                    <button onclick="filterStatus('avenir')" id="btn-filter-avenir" class="px-3 py-1.5 rounded-lg text-xs font-semibold tracking-wide transition-all-300 text-slate-400 hover:text-purple-400">
+                        🟣 À Venir
+                    </button>
+                </div>
+
+                <!-- Simulation Trigger Direct -->
+                <button onclick="startAutoCycle()" id="btn-main-loop" class="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 text-white font-bold text-xs hover:from-emerald-500 hover:to-teal-400 transition-all shadow-lg shadow-emerald-950/40 flex items-center gap-2">
+                    <i class="fa-solid fa-circle-play" id="main-loop-icon"></i> <span id="main-loop-text">Lancer le Cycle</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Conteneur principal -->
+    <main class="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 grid grid-cols-1 xl:grid-cols-12 gap-6">
+        
+        <!-- Left + Center Architecture Schema (Col span 9) -->
+        <div class="xl:col-span-9 flex flex-col gap-6">
+
+            <!-- Légende & Alerte d'état -->
+            <div class="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-4 flex flex-col sm:flex-row justify-between items-center gap-4 backdrop-blur-md">
+                <div class="flex items-center gap-2">
+                    <div class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></div>
+                    <span class="text-xs text-slate-300">Filtrez ou cliquez sur n'importe quel organe pour inspecter ses rouages et relations d'évolution.</span>
+                </div>
+                <div class="flex items-center gap-4 text-xs font-semibold">
+                    <span class="flex items-center gap-1.5 text-emerald-400"><span class="w-2.5 h-2.5 rounded bg-emerald-500/20 border border-emerald-400"></span> Déjà en place</span>
+                    <span class="flex items-center gap-1.5 text-amber-500"><span class="w-2.5 h-2.5 rounded bg-amber-500/20 border border-amber-500"></span> En construction</span>
+                    <span class="flex items-center gap-1.5 text-purple-400"><span class="w-2.5 h-2.5 rounded bg-purple-500/20 border border-purple-500"></span> À venir</span>
+                </div>
+            </div>
+
+            <!-- LE SCHEMA COMPLET DES COUCHES -->
+            <div class="relative flex flex-col gap-6">
+
+                <!-- COUCHE SUPÉRIEURE (CRÉATEUR, UTILISATEUR, CONSTITUTION) -->
+                <div class="grid grid-cols-1 md:grid-cols-12 gap-4">
+                    
+                    <!-- Créateur (Hors Système) -->
+                    <div id="node-creator" onclick="inspectNode('creator')" class="md:col-span-4 bg-slate-900/50 border-2 border-slate-800 rounded-2xl p-4 hover:border-sky-500/50 transition-all-300 cursor-pointer relative group overflow-hidden">
+                        <div class="absolute top-0 right-0 px-2 py-0.5 rounded-bl-lg bg-sky-500/10 text-sky-400 text-[9px] font-mono border-l border-b border-sky-500/20 font-bold">RACINE DE CONFIANCE</div>
+                        <div class="flex items-start gap-3">
+                            <div class="w-10 h-10 rounded-xl bg-sky-500/10 flex items-center justify-center text-sky-400 border border-sky-500/20">
+                                <i class="fa-solid fa-key text-lg"></i>
+                            </div>
+                            <div class="flex-1">
+                                <h3 class="text-sm font-bold text-white flex items-center gap-1.5">
+                                    CRÉATEUR <span class="text-[9px] text-sky-400 font-mono">(KILY)</span>
+                                </h3>
+                                <p class="text-[10px] text-slate-400 mt-1">Autorité suprême exceptionnelle hors-système.</p>
+                                <ul class="text-[10px] text-slate-400 mt-3 space-y-1 list-disc list-inside">
+                                    <li>Définit & modifie les fondations</li>
+                                    <li>Fixe les limites et les valeurs</li>
+                                    <li>Peut reprendre le contrôle d'urgence</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Utilisateur (Dans le système) -->
+                    <div id="node-user" onclick="inspectNode('user')" class="md:col-span-4 bg-slate-900/50 border border-slate-800 rounded-2xl p-4 hover:border-blue-500/50 transition-all-300 cursor-pointer relative overflow-hidden">
+                        <div class="absolute top-0 right-0 px-2 py-0.5 rounded-bl-lg bg-blue-500/10 text-blue-400 text-[9px] font-mono border-l border-b border-blue-500/20 font-bold">DANS LE SYSTÈME</div>
+                        <div class="flex items-start gap-3">
+                            <div class="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center text-blue-400 border border-blue-500/20">
+                                <i class="fa-solid fa-circle-user text-lg"></i>
+                            </div>
+                            <div class="flex-1">
+                                <h3 class="text-sm font-bold text-white">UTILISATEUR</h3>
+                                <p class="text-[10px] text-slate-400 mt-1">Donne la demande et collabore activement.</p>
+                                <ul class="text-[10px] text-slate-400 mt-3 space-y-1 list-disc list-inside">
+                                    <li>Donne la demande & le contexte</li>
+                                    <li>Débat, interagit et coopère</li>
+                                    <li>Valide, refuse et supervise</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Constitution Nexus (Encadre tout) -->
+                    <div id="node-constitution" onclick="inspectNode('constitution')" class="md:col-span-4 bg-slate-900/50 border border-purple-500/50 rounded-2xl p-4 hover:border-purple-400 transition-all-300 cursor-pointer relative overflow-hidden">
+                        <div class="absolute top-0 right-0 px-2 py-0.5 rounded-bl-lg bg-purple-500/10 text-purple-400 text-[9px] font-mono border-l border-b border-purple-500/20 font-bold">À VENIR / CHARTE</div>
+                        <div class="flex items-start gap-3">
+                            <div class="w-10 h-10 rounded-xl bg-purple-500/10 flex items-center justify-center text-purple-400 border border-purple-500/20">
+                                <i class="fa-solid fa-scale-balanced text-lg"></i>
+                            </div>
+                            <div class="flex-1">
+                                <h3 class="text-sm font-bold text-white">CONSTITUTION</h3>
+                                <p class="text-[10px] text-purple-300 mt-1">Cadre, protection et cohérence suprême.</p>
+                                <div class="flex flex-wrap gap-1 mt-2.5">
+                                    <span class="text-[8px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">Identité</span>
+                                    <span class="text-[8px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">Principes</span>
+                                    <span class="text-[8px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">Gouvernance</span>
+                                    <span class="text-[8px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">Règles du jeu</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- COUCHE CENTRALE : LES ORGANES PERMANENTS (NEXUS CORE) -->
+                <div class="border border-slate-800 rounded-3xl p-5 bg-slate-950/40 backdrop-blur-sm relative">
+                    <div class="absolute -top-3 left-6 px-3 py-1 rounded-full bg-slate-900 border border-slate-800 text-[10px] tracking-widest font-black uppercase text-emerald-400 flex items-center gap-1.5">
+                        <i class="fa-solid fa-dna animate-pulse"></i> Organes Permanents (NEXUS CORE) — Le Moteur Vivant
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-5 gap-4 mt-3">
+                        
+                        <!-- 95 - Générateur -->
+                        <div id="node-n95" onclick="inspectNode('n95')" class="bg-slate-900/50 border border-emerald-500/50 rounded-xl p-3 hover:border-emerald-400 transition-all-300 cursor-pointer flex flex-col justify-between h-full min-h-[170px]">
+                            <div>
+                                <div class="flex justify-between items-center">
+                                    <span class="text-[10px] text-emerald-400 font-mono font-bold">CORE 95</span>
+                                    <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                                </div>
+                                <h4 class="text-xs font-extrabold text-white mt-1.5 flex items-center gap-1">
+                                    <i class="fa-solid fa-lightbulb text-emerald-400"></i> 95 - GÉNÉRATEUR
+                                </h4>
+                                <p class="text-[9px] text-slate-400 mt-1">Idées / Pistes / Initiatives</p>
+                                <p class="text-[10px] text-slate-300 mt-2 leading-tight">Explore sans limite et crée des combinaisons nouvelles pour ouvrir le champ des possibles.</p>
+                            </div>
+                            <div class="mt-2 pt-2 border-t border-slate-800/80 text-[8px] uppercase tracking-wider text-emerald-400/80 font-bold">
+                                Créativité & Innovation
+                            </div>
+                        </div>
+
+                        <!-- 96 - Réacteur -->
+                        <div id="node-n96" onclick="inspectNode('n96')" class="bg-slate-900/50 border border-emerald-500/50 rounded-xl p-3 hover:border-emerald-400 transition-all-300 cursor-pointer flex flex-col justify-between h-full min-h-[170px]">
+                            <div>
+                                <div class="flex justify-between items-center">
+                                    <span class="text-[10px] text-emerald-400 font-mono font-bold">CORE 96</span>
+                                    <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                                </div>
+                                <h4 class="text-xs font-extrabold text-white mt-1.5 flex items-center gap-1">
+                                    <i class="fa-solid fa-brain text-emerald-400"></i> 96 - RÉACTEUR
+                                </h4>
+                                <p class="text-[9px] text-slate-400 mt-1">Analyse / Réaction / Sens</p>
+                                <p class="text-[10px] text-slate-300 mt-2 leading-tight">Relie, compare, interprète et cherche le sens en détectant les biais pour un jugement éclairé.</p>
+                            </div>
+                            <div class="mt-2 pt-2 border-t border-slate-800/80 text-[8px] uppercase tracking-wider text-emerald-400/80 font-bold">
+                                Compréhension & Jugement
+                            </div>
+                        </div>
+
+                        <!-- Zéro - Arène -->
+                        <div id="node-zero" onclick="inspectNode('zero')" class="bg-slate-900/50 border border-amber-500/50 rounded-xl p-3 hover:border-amber-400 transition-all-300 cursor-pointer flex flex-col justify-between h-full min-h-[170px]">
+                            <div>
+                                <div class="flex justify-between items-center">
+                                    <span class="text-[10px] text-amber-400 font-mono font-bold">CORE ZERO</span>
+                                    <span class="w-2 h-2 rounded-full bg-amber-400"></span>
+                                </div>
+                                <h4 class="text-xs font-extrabold text-white mt-1.5 flex items-center gap-1">
+                                    <i class="fa-solid fa-scale-unbalanced-flip text-amber-400"></i> ZÉRO - ARÈNE
+                                </h4>
+                                <p class="text-[9px] text-slate-400 mt-1">Confrontation & Débat</p>
+                                <p class="text-[10px] text-slate-300 mt-2 leading-tight">Frotte les hypothèses face à face pour séparer le vrai du superflu par la friction.</p>
+                            </div>
+                            <div class="mt-2 pt-2 border-t border-slate-800/80 text-[8px] uppercase tracking-wider text-amber-400/80 font-bold">
+                                Confrontation & Tri
+                            </div>
+                        </div>
+
+                        <!-- 97 - Exécuteur -->
+                        <div id="node-n97" onclick="inspectNode('n97')" class="bg-slate-900/50 border border-emerald-500/50 rounded-xl p-3 hover:border-emerald-400 transition-all-300 cursor-pointer flex flex-col justify-between h-full min-h-[170px]">
+                            <div>
+                                <div class="flex justify-between items-center">
+                                    <span class="text-[10px] text-emerald-400 font-mono font-bold">CORE 97</span>
+                                    <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                                </div>
+                                <h4 class="text-xs font-extrabold text-white mt-1.5 flex items-center gap-1">
+                                    <i class="fa-solid fa-cubes text-emerald-400"></i> 97 - EXÉCUTEUR
+                                </h4>
+                                <p class="text-[9px] text-slate-400 mt-1">Réalisation / Test / Action</p>
+                                <p class="text-[10px] text-slate-300 mt-2 leading-tight">Transforme l'idée en code, en actionneur ou en simulation concrète avec mesure d'impact direct.</p>
+                            </div>
+                            <div class="mt-2 pt-2 border-t border-slate-800/80 text-[8px] uppercase tracking-wider text-emerald-400/80 font-bold">
+                                Réalisation & Test
+                            </div>
+                        </div>
+
+                        <!-- 92 - Perfectionneur -->
+                        <div id="node-n92" onclick="inspectNode('n92')" class="bg-slate-900/50 border border-purple-500/50 rounded-xl p-3 hover:border-purple-400 transition-all-300 cursor-pointer flex flex-col justify-between h-full min-h-[170px]">
+                            <div>
+                                <div class="flex justify-between items-center">
+                                    <span class="text-[10px] text-purple-400 font-mono font-bold">CORE 92</span>
+                                    <span class="w-2 h-2 rounded-full bg-purple-400"></span>
+                                </div>
+                                <h4 class="text-xs font-extrabold text-white mt-1.5 flex items-center gap-1">
+                                    <i class="fa-solid fa-wand-magic-sparkles text-purple-400"></i> 92 - PERFECTIONNEUR
+                                </h4>
+                                <p class="text-[9px] text-slate-400 mt-1">Amélioration / Maîtrise</p>
+                                <p class="text-[10px] text-purple-200 mt-2 leading-tight">Affine, optimise les sorties et élimine toute dette technique vers l'excellence.</p>
+                            </div>
+                            <div class="mt-2 pt-2 border-t border-slate-800/80 text-[8px] uppercase tracking-wider text-purple-400/80 font-bold">
+                                Perfection & Excellence
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+
+                <!-- INFRASTRUCTURE: VEILLE, MÉMOIRE & CAPTEURS -->
+                <div class="grid grid-cols-1 md:grid-cols-12 gap-4">
+                    
+                    <!-- 98 - Veille & Immunité -->
+                    <div id="node-n98" onclick="inspectNode('n98')" class="md:col-span-4 bg-slate-900/50 border border-emerald-500/30 rounded-2xl p-4 hover:border-emerald-500/50 transition-all-300 cursor-pointer relative overflow-hidden">
+                        <div class="absolute top-2 right-2 flex items-center gap-1">
+                            <span class="text-[8px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-bold">ACTIF</span>
+                        </div>
+                        <div class="flex gap-3">
+                            <div class="w-10 h-10 rounded-xl bg-slate-800 flex items-center justify-center text-slate-300 border border-slate-700 shrink-0">
+                                <i class="fa-solid fa-shield-halved text-lg text-emerald-400"></i>
+                            </div>
+                            <div>
+                                <h3 class="text-sm font-bold text-white">98 - VEILLE & IMMUNITÉ</h3>
+                                <p class="text-[10px] text-slate-400 mt-1">Surveillance, sécurité et robustesse cognitive.</p>
+                                <ul class="text-[10px] text-slate-400 mt-3 space-y-1.5 list-disc list-inside">
+                                    <li>Détecte les menaces et anomalies</li>
+                                    <li>Protège l'intégrité de la Constitution</li>
+                                    <li>Résiste aux attaques et dérives</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Mémoire Centrale (Le Cœur) -->
+                    <div id="node-memory" onclick="inspectNode('memory')" class="md:col-span-4 bg-slate-900/50 border border-red-500/40 rounded-2xl p-4 hover:border-red-500/60 transition-all-300 cursor-pointer relative overflow-hidden">
+                        <div class="absolute top-2 right-2 flex items-center gap-1">
+                            <span class="text-[8px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/20 font-bold">LE CŒUR</span>
+                        </div>
+                        <div class="flex gap-3">
+                            <div class="w-10 h-10 rounded-xl bg-red-950/20 flex items-center justify-center text-red-400 border border-red-500/20 shrink-0">
+                                <i class="fa-solid fa-database text-lg"></i>
+                            </div>
+                            <div>
+                                <h3 class="text-sm font-bold text-white">MÉMOIRE CENTRALE</h3>
+                                <p class="text-[10px] text-slate-400 mt-1">Structure d'expérience évolutive et unifiée.</p>
+                                <ul class="text-[10px] text-slate-400 mt-3 space-y-1.5 list-disc list-inside">
+                                    <li>Enregistre succès et échecs passés</li>
+                                    <li>Analyse de causalité (causes & effets)</li>
+                                    <li>Base de transfert collective et objective</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Capteurs (Les Sens) -->
+                    <div id="node-sensors" onclick="inspectNode('sensors')" class="md:col-span-4 bg-slate-900/50 border border-emerald-500/40 rounded-2xl p-4 hover:border-emerald-500/60 transition-all-300 cursor-pointer relative overflow-hidden">
+                        <div class="absolute top-2 right-2 flex items-center gap-1">
+                            <span class="text-[8px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-bold">ACTIF</span>
+                        </div>
+                        <div class="flex gap-3">
+                            <div class="w-10 h-10 rounded-xl bg-emerald-950/20 flex items-center justify-center text-emerald-400 border border-emerald-500/20 shrink-0">
+                                <i class="fa-solid fa-tower-broadcast text-lg animate-pulse"></i>
+                            </div>
+                            <div>
+                                <h3 class="text-sm font-bold text-white">CAPTEURS — LES SENS</h3>
+                                <p class="text-[10px] text-slate-400 mt-1">Perçoit le réel & fournit les télémétries.</p>
+                                <ul class="text-[10px] text-slate-400 mt-3 space-y-1.5 list-disc list-inside">
+                                    <li>Mesure l'effet réel chez l'Utilisateur</li>
+                                    <li>Contrôle de performance & charge</li>
+                                    <li>Alertes proactives d'exposition au danger</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- SOCLE DE CALCUL: SOURCE-1 -->
+                <div id="node-source1" onclick="inspectNode('source1')" class="bg-slate-900/40 border border-amber-500/40 rounded-2xl p-4 hover:border-amber-400 transition-all-300 cursor-pointer relative overflow-hidden">
+                    <div class="absolute top-2 right-2">
+                        <span class="text-[8px] px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 font-bold">EN CONSTRUCTION</span>
+                    </div>
+                    <div class="flex items-center gap-4">
+                        <div class="w-12 h-12 rounded-xl bg-amber-500/10 flex items-center justify-center text-amber-400 border border-amber-500/20 shrink-0">
+                            <i class="fa-solid fa-microchip text-2xl"></i>
+                        </div>
+                        <div class="flex-1">
+                            <h3 class="text-sm font-black text-white flex items-center gap-2">
+                                SOURCE-1 — MOTEUR DE CALCUL & SIMULATION
+                            </h3>
+                            <p class="text-[10px] text-slate-400 mt-0.5">Calcul brut et simulation de causalité pour explorer l'ensemble de l'espace des possibles.</p>
+                            <div class="flex flex-wrap gap-4 mt-2 text-[10px] text-slate-300">
+                                <span class="flex items-center gap-1"><i class="fa-solid fa-circle-nodes text-amber-500 text-[8px]"></i> Calculs massifs</span>
+                                <span class="flex items-center gap-1"><i class="fa-solid fa-circle-nodes text-amber-500 text-[8px]"></i> Simulations de scénarios</span>
+                                <span class="flex items-center gap-1"><i class="fa-solid fa-circle-nodes text-amber-500 text-[8px]"></i> Comparaison lourde & Arbitrage</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- COUCHE LOGIQUE ADAPTABLE: SYSTÈMES PASSAGERS -->
+                <div id="node-transient" onclick="inspectNode('transient')" class="bg-slate-900/30 border border-blue-500/30 rounded-2xl p-4 hover:border-blue-400 transition-all-300 cursor-pointer relative overflow-hidden">
+                    <div class="absolute top-2 right-2">
+                        <span class="text-[8px] px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20 font-bold">FLEXIBLE & EXTENSIBLE</span>
+                    </div>
+                    <div class="flex items-center gap-4">
+                        <div class="w-12 h-12 rounded-xl bg-blue-500/10 flex items-center justify-center text-blue-400 border border-blue-500/20 shrink-0">
+                            <i class="fa-solid fa-puzzle-piece text-2xl"></i>
+                        </div>
+                        <div class="flex-1">
+                            <h3 class="text-sm font-black text-white">ORGANES PASSAGERS / TEMPORAIRES <span class="text-xs text-blue-400 font-normal">(MODULES ÉPHÉMÈRES)</span></h3>
+                            <p class="text-[10px] text-slate-400 mt-0.5">Créés dynamiquement pour une mission courte ou longue, ils s'éteignent après avoir transmis leurs leçons à la mémoire.</p>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- SECTION INFÉRIEURE : CYCLE DE FONCTIONNEMENT & PRINCIPES -->
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 mt-2">
+                
+                <!-- Le Cycle Stepper interactif (Col span 8) -->
+                <div class="lg:col-span-8 bg-slate-900/60 border border-slate-800/80 rounded-2xl p-5 shadow-xl backdrop-blur-md">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-xs font-bold text-white tracking-wider uppercase flex items-center gap-2">
+                            <span class="relative flex h-2 w-2">
+                                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                            </span>
+                            Cycle de Fonctionnement (Boucle d'Évolution Continue)
+                        </h3>
+                        <span id="cycle-step-active" class="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Étape active : Aucune</span>
+                    </div>
+
+                    <!-- Steps List Grid -->
+                    <div class="grid grid-cols-3 sm:grid-cols-9 gap-2">
+                        <button onclick="triggerStep(1)" id="step-1" class="p-2 rounded-xl bg-slate-950 border border-slate-800 hover:border-slate-700 text-center transition-all-300">
+                            <div class="text-[10px] font-mono text-slate-500 font-bold">01</div>
+                            <div class="text-[9px] font-bold text-white truncate mt-0.5">Demande</div>
+                        </button>
+                        <button onclick="triggerStep(2)" id="step-2" class="p-2 rounded-xl bg-slate-950 border border-slate-800 hover:border-slate-700 text-center transition-all-300">
+                            <div class="text-[10px] font-mono text-slate-500 font-bold">02</div>
+                            <div class="text-[9px] font-bold text-white truncate mt-0.5">Génération</div>
+                        </button>
+                        <button onclick="triggerStep(3)" id="step-3" class="p-2 rounded-xl bg-slate-950 border border-slate-800 hover:border-slate-700 text-center transition-all-300">
+                            <div class="text-[10px] font-mono text-slate-500 font-bold">03</div>
+                            <div class="text-[9px] font-bold text-white truncate mt-0.5">Analyse</div>
+                        </button>
+                        <button onclick="triggerStep(4)" id="step-4" class="p-2 rounded-xl bg-slate-950 border border-slate-800 hover:border-slate-700 text-center transition-all-300">
+                            <div class="text-[10px] font-mono text-slate-500 font-bold">04</div>
+                            <div class="text-[9px] font-bold text-white truncate mt-0.5">Arena</div>
+                        </button>
+                        <button onclick="triggerStep(5)" id="step-5" class="p-2 rounded-xl bg-slate-950 border border-slate-800 hover:border-slate-700 text-center transition-all-300">
+                            <div class="text-[10px] font-mono text-slate-500 font-bold">05</div>
+                            <div class="text-[9px] font-bold text-white truncate mt-0.5">Exécution</div>
+                        </button>
+                        <button onclick="triggerStep(6)" id="step-6" class="p-2 rounded-xl bg-slate-950 border border-slate-800 hover:border-slate-700 text-center transition-all-300">
+                            <div class="text-[10px] font-mono text-slate-500 font-bold">06</div>
+                            <div class="text-[9px] font-bold text-white truncate mt-0.5">Perfection</div>
+                        </button>
+                        <button onclick="triggerStep(7)" id="step-7" class="p-2 rounded-xl bg-slate-950 border border-slate-800 hover:border-slate-700 text-center transition-all-300">
+                            <div class="text-[10px] font-mono text-slate-500 font-bold">07</div>
+                            <div class="text-[9px] font-bold text-white truncate mt-0.5">Mémorise</div>
+                        </button>
+                        <button onclick="triggerStep(8)" id="step-8" class="p-2 rounded-xl bg-slate-950 border border-slate-800 hover:border-slate-700 text-center transition-all-300">
+                            <div class="text-[10px] font-mono text-slate-500 font-bold">08</div>
+                            <div class="text-[9px] font-bold text-white truncate mt-0.5">Évalue</div>
+                        </button>
+                        <button onclick="triggerStep(9)" id="step-9" class="p-2 rounded-xl bg-slate-950 border border-slate-800 hover:border-slate-700 text-center transition-all-300">
+                            <div class="text-[10px] font-mono text-slate-500 font-bold">09</div>
+                            <div class="text-[9px] font-bold text-white truncate mt-0.5">Évolue</div>
+                        </button>
+                    </div>
+
+                    <!-- Live Terminal Output of Execution cycle -->
+                    <div class="bg-slate-950 rounded-xl p-3 border border-slate-800/80 mt-4">
+                        <div class="flex items-center justify-between text-[10px] text-slate-500 font-mono pb-2 border-b border-slate-900">
+                            <span><i class="fa-solid fa-terminal mr-1"></i> CONSOLE DE SUIVI COGNITIF</span>
+                            <span id="terminal-step-badge">IDLE</span>
+                        </div>
+                        <p id="terminal-logs" class="text-xs text-slate-300 font-mono mt-2 leading-relaxed h-[52px] overflow-y-auto">
+                            Prêt. Cliquez sur "Lancer le Cycle" ou une étape pour tracer le circuit de l'information.
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Principes Fondamentaux (Col span 4) -->
+                <div class="lg:col-span-4 bg-slate-900/60 border border-slate-800/80 rounded-2xl p-5 shadow-xl backdrop-blur-md flex flex-col justify-between">
+                    <div>
+                        <h3 class="text-xs font-bold text-white tracking-wider uppercase mb-3 flex items-center gap-1.5">
+                            <i class="fa-solid fa-atom text-emerald-400"></i> Principes Fondamentaux
+                        </h3>
+                        <div class="grid grid-cols-2 gap-2 text-[10px] text-slate-300">
+                            <div class="bg-slate-950/40 p-2 rounded-lg border border-slate-800 hover:border-slate-750">
+                                <span class="font-bold text-emerald-400 flex items-center gap-1"><i class="fa-solid fa-arrow-up-right-dots"></i> Autonomie</span>
+                                NEXUS progresse d'assisté à autonome.
+                            </div>
+                            <div class="bg-slate-950/40 p-2 rounded-lg border border-slate-800 hover:border-slate-750">
+                                <span class="font-bold text-emerald-400 flex items-center gap-1"><i class="fa-solid fa-graduation-cap"></i> Apprentissage</span>
+                                Expériences validées par retour collectif.
+                            </div>
+                            <div class="bg-slate-950/40 p-2 rounded-lg border border-slate-800 hover:border-slate-750">
+                                <span class="font-bold text-emerald-400 flex items-center gap-1"><i class="fa-solid fa-flask"></i> Créativité</span>
+                                Génère des pistes hors limites théoriques.
+                            </div>
+                            <div class="bg-slate-950/40 p-2 rounded-lg border border-slate-800 hover:border-slate-750">
+                                <span class="font-bold text-emerald-400 flex items-center gap-1"><i class="fa-solid fa-sliders"></i> Adaptation</span>
+                                Réglages constants selon les retours réels.
+                            </div>
+                        </div>
+                    </div>
+                    <div class="text-[9px] text-slate-500 font-mono mt-3 text-center border-t border-slate-800 pt-2">
+                        Biologie Logicielle Autonome • Version 1.5
+                    </div>
+                </div>
+
+            </div>
+
+        </div>
+
+        <!-- Right Panel: Chantiers ouverts & Inspections detailed (Col span 3) -->
+        <div class="xl:col-span-3 flex flex-col gap-6">
+            
+            <!-- Audit detailed output of inspected element -->
+            <div id="inspector-card" class="bg-slate-900 border-2 border-slate-800 rounded-3xl p-5 shadow-2xl relative overflow-hidden flex flex-col justify-between min-h-[350px]">
+                <div>
+                    <div class="flex items-center gap-3 pb-3 border-b border-slate-800">
+                        <div id="inspector-icon" class="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 text-lg">
+                            <i class="fa-solid fa-circle-nodes"></i>
+                        </div>
+                        <div>
+                            <h2 id="inspector-title" class="text-sm font-bold text-white">Inspecteur d'Organe</h2>
+                            <span id="inspector-badge" class="text-[9px] font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-1.5 py-0.5 rounded font-bold">DÉPART</span>
+                        </div>
+                    </div>
+                    <p id="inspector-desc" class="text-[11px] text-slate-300 leading-relaxed mt-4">
+                        Cliquez sur un organe ou lancez la simulation de cycle pour en examiner les forces constitutives, les causes d'erreurs filtrées et ses rôles d'évolution.
+                    </p>
+                    <div id="inspector-audit-box" class="hidden mt-4">
+                        <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-2">Comportements attendus :</span>
+                        <ul id="inspector-audit-list" class="space-y-2 text-[10px] text-slate-300">
+                            <!-- Populated dynamically -->
+                        </ul>
+                    </div>
+                </div>
+                <div class="pt-4 border-t border-slate-800/80 mt-6">
+                    <span class="text-[9px] text-slate-500 font-mono">ID de l'organe cible : <span id="inspector-target" class="text-slate-400 font-bold">aucun</span></span>
+                </div>
+            </div>
+
+            <!-- Road Map Section / À venir (Méta-Évolution) -->
+            <div class="bg-purple-950/20 border-2 border-purple-500/50 rounded-3xl p-5 shadow-2xl relative overflow-hidden flex-1 flex flex-col justify-between">
+                <div>
+                    <div class="flex items-center gap-2 pb-3 border-b border-purple-500/30">
+                        <i class="fa-solid fa-rocket text-purple-400"></i>
+                        <div>
+                            <h2 class="text-sm font-black text-white">MÉTA-ÉVOLUTION</h2>
+                            <span class="text-[9px] font-mono text-purple-400 font-bold tracking-widest uppercase">Chantiers ouverts (Avenir)</span>
+                        </div>
+                    </div>
+
+                    <p class="text-[10px] text-slate-400 leading-relaxed mt-3">
+                        Feuille de route stratégique estimée à ~50% résolue. Trois défis ouverts de recherche pure :
+                    </p>
+
+                    <div class="space-y-4 mt-4">
+                        <div class="bg-slate-950/60 p-3 rounded-xl border border-purple-500/20">
+                            <h4 class="text-xs font-bold text-purple-300 flex items-center gap-1.5">
+                                <i class="fa-solid fa-magnifying-glass-chart"></i> Découverte de critères
+                            </h4>
+                            <p class="text-[10px] text-slate-400 mt-1 leading-snug">Identifier de nouveaux critères sans intervention humaine (ex: robustesse juridique, éthique).</p>
+                        </div>
+
+                        <div class="bg-slate-950/60 p-3 rounded-xl border border-purple-500/20">
+                            <h4 class="text-xs font-bold text-purple-300 flex items-center gap-1.5">
+                                <i class="fa-solid fa-code-merge"></i> Méta-évolution
+                            </h4>
+                            <p class="text-[10px] text-slate-400 mt-1 leading-snug">Rendre le système capable de modifier ses critères, règles et stratégies internes de second niveau.</p>
+                        </div>
+
+                        <div class="bg-slate-950/60 p-3 rounded-xl border border-purple-500/20">
+                            <h4 class="text-xs font-bold text-purple-300 flex items-center gap-1.5">
+                                <i class="fa-solid fa-palette"></i> Mesurer la créativité
+                            </h4>
+                            <p class="text-[10px] text-slate-400 mt-1 leading-snug">Définir des critères statistiques de nouveauté, surprise, et de distance aux réponses connues.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-4 pt-3 border-t border-purple-500/20 text-center">
+                    <span class="text-[9px] text-purple-400 font-mono font-bold tracking-widest uppercase">Objectif : Auto-réinvention</span>
+                </div>
+            </div>
+
+        </div>
+
+    </main>
+
+    <!-- Footer principal -->
+    <footer class="bg-slate-950 border-t border-slate-900/80 py-3 px-6 mt-6">
+        <div class="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center text-[10px] text-slate-500 gap-2">
+            <span>Vision d'existence approuvée par l'équipe NEXUS — 2026</span>
+            <span class="flex items-center gap-1.5"><i class="fa-solid fa-heart text-red-500"></i> Architecture logicielle validée par Kily & ChatGPT</span>
+        </div>
+    </footer>
+
+    <!-- Logique Interactive -->
+    <script>
+        let currentFilter = 'all';
+        let isLoopRunning = false;
+        let loopTimeout = null;
+
+        // Base de données structurée des organes
+        const nexusData = {
+            creator: {
+                title: "Créateur (Kily)",
+                badge: "RACINE DE CONFIANCE",
+                badgeClass: "bg-sky-500/10 text-sky-400 border-sky-500/20",
+                icon: "<i class='fa-solid fa-key'></i>",
+                borderClass: "border-sky-500/50",
+                status: "place",
+                desc: "Couche méta-systémique et racine de confiance de NEXUS. Kily se situe en dehors de la boucle constitutionnelle de l'organisme cognitif.",
+                bulletPoints: [
+                    "<strong>Pouvoir de refonte :</strong> Définit, autorise ou amende la charte de la Constitution.",
+                    "<strong>Contrôle d'urgence :</strong> Détient le pouvoir d'arrêter, de restructurer ou de réviser l'organisme.",
+                    "<strong>Exception biologique :</strong> Ses actions constituent l'autorité souveraine ultime."
+                ]
+            },
+            user: {
+                title: "Utilisateur",
+                badge: "COOPÉRATEUR INTERNE",
+                badgeClass: "bg-blue-500/10 text-blue-400 border-blue-500/20",
+                icon: "<i class='fa-solid fa-circle-user'></i>",
+                borderClass: "border-blue-500/50",
+                status: "place",
+                desc: "Partenaire actif logé au seuil de l'écosystème. Il alimente la boucle cognitive en besoins réels, surveille et arbitre les propositions de valeur.",
+                bulletPoints: [
+                    "<strong>Apport de contexte :</strong> Expose le besoin initial et détaille ses contraintes.",
+                    "<strong>Débat actif :</strong> Échange, critique ou affine les stratégies proposées.",
+                    "<strong>Validation finale :</strong> Valide ou rejette les prototypes formés par l'exécuteur."
+                ]
+            },
+            constitution: {
+                title: "Constitution Nexus",
+                badge: "CADRE EN VIGUEUR",
+                badgeClass: "bg-purple-500/10 text-purple-400 border-purple-500/20",
+                icon: "<i class='fa-solid fa-scale-balanced'></i>",
+                borderClass: "border-purple-500/50",
+                status: "avenir",
+                desc: "La charte inviolable qui protège NEXUS des hallucinations et de la dérive. Elle impose les règles éthiques et fonctionnelles d'existence.",
+                bulletPoints: [
+                    "<strong>Encadrement absolu :</strong> S'applique à tous les organes sans exception.",
+                    "<strong>Piliers d'identité :</strong> Définit la raison d'être, l'évolutivité et les limites du système.",
+                    "<strong>Régulateur de dérives :</strong> Interdit les actions contraires aux priorités fixées par le Créateur."
+                ]
+            },
+            n95: {
+                title: "95 - Générateur",
+                badge: "CORE / CRÉATIVITÉ",
+                badgeClass: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
+                icon: "<i class='fa-solid fa-lightbulb'></i>",
+                borderClass: "border-emerald-500/50",
+                status: "place",
+                desc: "La force créative de NEXUS. Il explore, combine et invente des stratégies audacieuses sans s'inquiéter de leur faisabilité matérielle immédiate.",
+                bulletPoints: [
+                    "<strong>Pistes et concepts :</strong> Formule de nombreuses options d'action face à un problème.",
+                    "<strong>Exploration ouverte :</strong> Pousse l'intelligence au-delà des sentiers battus.",
+                    "<strong>Alimentation :</strong> Propose ses théories brutes à Zéro et à l'analyse de 96."
+                ]
+            },
+            n96: {
+                title: "96 - Réacteur",
+                badge: "CORE / ANALYSE",
+                badgeClass: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
+                icon: "<i class='fa-solid fa-brain'></i>",
+                borderClass: "border-emerald-500/50",
+                status: "place",
+                desc: "Le garant de la cohérence et de l'utilité contextuelle. Il structure les flux d'idées de 95 et critique leur pertinence d'usage.",
+                bulletPoints: [
+                    "<strong>Recherche de sens :</strong> Analyse l'opportunité, la conformité et les biais éventuels.",
+                    "<strong>Multi-critères :</strong> Arbitre sur des critères équilibrés (coût, rapidité, risque, valeur).",
+                    "<strong>Garde-fou :</strong> Élimine les hallucinations logiques avant confrontation."
+                ]
+            },
+            zero: {
+                title: "Zéro - Arène",
+                badge: "CORE / CONFRONTATION",
+                badgeClass: "bg-amber-500/10 text-amber-400 border-amber-500/20",
+                icon: "<i class='fa-solid fa-scale-unbalanced-flip'></i>",
+                borderClass: "border-amber-500/50",
+                status: "construction",
+                desc: "L'arène d'opposition de NEXUS. Zéro accueille les théories et les frotte à des scénarios contraires pour s'assurer que seule l'excellence survit.",
+                bulletPoints: [
+                    "<strong>Compétition objective :</strong> Fait s'affronter des versions alternatives sans biais subjectif.",
+                    "<strong>Fusion cognitive :</strong> Associe le meilleur de chaque stratégie testée.",
+                    "<strong>Friction libératrice :</strong> Met en lumière les failles cachées d'une proposition."
+                ]
+            },
+            n97: {
+                title: "97 - Exécuteur",
+                badge: "CORE / RÉALISATION",
+                badgeClass: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
+                icon: "<i class='fa-solid fa-cubes'></i>",
+                borderClass: "border-emerald-500/50",
+                status: "place",
+                desc: "Les mains d'œuvre de NEXUS. Une fois l'idée validée, il convertit le modèle abstrait en code, scripts ou prototypes exécutables.",
+                bulletPoints: [
+                    "<strong>Traduction en actes :</strong> Construit l'artefact technique demandé.",
+                    "<strong>Test empirique :</strong> Lance les premiers bancs d'essai pour valider l'absence d'erreurs brutes.",
+                    "<strong>Retour d'impact :</strong> Transmet ses résultats à 92 pour l'affinage final."
+                ]
+            },
+            n92: {
+                title: "92 - Perfectionneur",
+                badge: "CORE / OPTIMISATION",
+                badgeClass: "bg-purple-500/10 text-purple-400 border-purple-500/20",
+                icon: "<i class='fa-solid fa-wand-magic-sparkles'></i>",
+                borderClass: "border-purple-500/50",
+                status: "avenir",
+                desc: "L'artisan de l'excellence. Il s'occupe de simplifier, d'améliorer l'esthétique et d'optimiser l'efficience de la réalisation matérielle de 97.",
+                bulletPoints: [
+                    "<strong>Suppression du superflu :</strong> Nettoie le code, affine la mise en page, raccourcit les temps d'exécution.",
+                    "<strong>Alignement d'excellence :</strong> Assure que le rendu respecte les standards les plus stricts.",
+                    "<strong>Liaison mémoire :</strong> Prépare l'artefact pour son stockage d'expérience en mémoire."
+                ]
+            },
+            n98: {
+                title: "98 - Veille & Immunité",
+                badge: "SÉCURITÉ / SURVEILLANCE",
+                badgeClass: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
+                icon: "<i class='fa-solid fa-shield-halved'></i>",
+                borderClass: "border-emerald-500/50",
+                status: "place",
+                desc: "Le système immunitaire de NEXUS. Il protège l'organisme des exploits logiques, des boucles infinies et des anomalies de comportement.",
+                bulletPoints: [
+                    "<strong>Surveillance active :</strong> Détecte les écarts comportementaux en continu.",
+                    "<strong>Sécurité cognitive :</strong> Alerte l'Utilisateur ou Kily en cas de compromission évidente.",
+                    "<strong>Régulateur d'erreur :</strong> Intercepte les pannes logicielles avant qu'elles ne se propagent."
+                ]
+            },
+            memory: {
+                title: "Mémoire Centrale",
+                badge: "CONNAISSANCE / COEUR",
+                badgeClass: "bg-red-500/10 text-red-400 border-red-500/20",
+                icon: "<i class='fa-solid fa-database'></i>",
+                borderClass: "border-red-500/50",
+                status: "place",
+                desc: "L'archive vivante et l'unique racine d'expérience de NEXUS. Elle unifie les observations et les causes réelles d'échecs/réussites.",
+                bulletPoints: [
+                    "<strong>Anti-point d'échec unique :</strong> Accessible de manière transparente par tout le collectif.",
+                    "<strong>Journal de transfert :</strong> Gère l'évolution sans accumuler de déchets logiques obsolètes.",
+                    "<strong>Analyse causale :</strong> Relie l'historique de performances aux choix d'architectures."
+                ]
+            },
+            sensors: {
+                title: "Capteurs",
+                badge: "TÉLÉMÉTRIE / SENS",
+                badgeClass: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
+                icon: "<i class='fa-solid fa-tower-broadcast'></i>",
+                borderClass: "border-emerald-500/50",
+                status: "place",
+                desc: "Les antennes de l'organisme. Ils mesurent les écarts de performance, la réception par l'Utilisateur et les changements brutaux d'environnement.",
+                bulletPoints: [
+                    "<strong>Mesure de l'effet réel :</strong> Évalue si l'actionneur a résolu le problème de l'Utilisateur.",
+                    "<strong>Veille d'environnement :</strong> Alerte de tout incident de charge.",
+                    "<strong>Ajustement de cycle :</strong> Pilote la rétroaction nécessaire vers l'arène Zéro."
+                ]
+            },
+            source1: {
+                title: "Source-1",
+                badge: "PUISSANCE / SIMULATION",
+                badgeClass: "bg-amber-500/10 text-amber-400 border-amber-500/20",
+                icon: "<i class='fa-solid fa-microchip'></i>",
+                borderClass: "border-amber-500/50",
+                status: "construction",
+                desc: "Le supercalculateur et simulateur de NEXUS. Il soutient l'évaluation de 96 et de l'arène Zéro lors de requêtes massives.",
+                bulletPoints: [
+                    "<strong>Simulation de causalité :</strong> Projette les risques d'une idée sur des milliers d'itérations.",
+                    "<strong>Calcul de masse :</strong> Traite les données volumineuses en un minimum de temps.",
+                    "<strong>Modélisation avancée :</strong> Calcule les probabilités d'erreur d'une solution."
+                ]
+            },
+            transient: {
+                title: "Organes Passagers",
+                badge: "MODULE ÉPHÉMÈRE",
+                badgeClass: "bg-blue-500/10 text-blue-400 border-blue-500/20",
+                icon: "<i class='fa-solid fa-puzzle-piece'></i>",
+                borderClass: "border-blue-500/30",
+                status: "place",
+                desc: "Instances jetables créées pour exécuter des calculs chirurgicaux très précis et s'éteindre une fois la livraison effectuée.",
+                bulletPoints: [
+                    "<strong>Flexibilité accrue :</strong> Prévient la saturation des processeurs principaux.",
+                    "<strong>Apprentissage court :</strong> Transmet les leçons acquises à la Mémoire Centrale puis se désintègre.",
+                    "<strong>Spécificité :</strong> Résout un unique calcul ciblé (ex: compilation d'un script)."
+                ]
+            }
+        };
+
+        // Action d'inspection d'un organe
+        function inspectNode(key) {
+            const data = nexusData[key];
+            if (!data) return;
+
+            // Highlight de l'élément sélectionné
+            resetHighlights();
+            const cardEl = document.getElementById(`node-${key}`);
+            if (cardEl) {
+                cardEl.classList.add('scale-[1.02]');
+                if (data.status === 'place') {
+                    cardEl.classList.add('glow-active-green', 'border-emerald-400', 'bg-emerald-950/10');
+                } else if (data.status === 'construction') {
+                    cardEl.classList.add('glow-active-orange', 'border-amber-400', 'bg-amber-950/10');
+                } else if (data.status === 'avenir') {
+                    cardEl.classList.add('glow-active-purple', 'border-purple-400', 'bg-purple-950/10');
+                }
+            }
+
+            // Remplissage du panneau d'inspection
+            document.getElementById('inspector-title').textContent = data.title;
+            document.getElementById('inspector-badge').textContent = data.badge;
+            document.getElementById('inspector-badge').className = `text-[9px] font-mono ${data.badgeClass} px-1.5 py-0.5 rounded font-bold`;
+            document.getElementById('inspector-desc').innerHTML = data.desc;
+            document.getElementById('inspector-target').textContent = key.toUpperCase();
+
+            const iconContainer = document.getElementById('inspector-icon');
+            iconContainer.innerHTML = data.icon;
+            
+            // Changement couleur d'icône du panneau d'inspection
+            if (data.status === 'place') {
+                iconContainer.className = "w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 text-lg";
+            } else if (data.status === 'construction') {
+                iconContainer.className = "w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 text-lg";
+            } else if (data.status === 'avenir') {
+                iconContainer.className = "w-10 h-10 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400 text-lg";
+            }
+
+            // Liste de comportements attendus
+            let pointsHtml = '';
+            data.bulletPoints.forEach(pt => {
+                pointsHtml += `
+                    <li class="bg-slate-950/60 p-2.5 rounded-xl border border-slate-800/80 leading-normal flex items-start gap-2">
+                        <span class="text-emerald-400 mt-0.5"><i class="fa-solid fa-square-check"></i></span>
+                        <div>${pt}</div>
+                    </li>
+                `;
+            });
+            document.getElementById('inspector-audit-list').innerHTML = pointsHtml;
+            document.getElementById('inspector-audit-box').classList.remove('hidden');
+        }
+
+        // Réinitialisation des états visuels
+        function resetHighlights() {
+            Object.keys(nexusData).forEach(k => {
+                const cardEl = document.getElementById(`node-${k}`);
+                if (cardEl) {
+                    cardEl.className = cardEl.className
+                        .replace(/\bglow-active-\w+\b/g, '')
+                        .replace(/\bscale-\[\d+\.\d+\]\b/g, '')
+                        .replace(/\bborder-\w+-\d+\/\d+\b/g, '')
+                        .replace(/\bbg-\w+-\d+\/\d+\b/g, '');
+                    
+                    // Remettre bordures standard
+                    cardEl.classList.add(nexusData[k].borderClass);
+                }
+            });
+        }
+
+        // Filtrage dynamique
+        function filterStatus(status) {
+            currentFilter = status;
+
+            // Mise à jour de l'état des boutons de filtres
+            const filters = ['all', 'place', 'construction', 'avenir'];
+            filters.forEach(f => {
+                const btn = document.getElementById(`btn-filter-${f}`);
+                if (f === status) {
+                    btn.className = btn.className.replace('text-slate-400', 'text-white bg-slate-800');
+                    if (!btn.className.includes('bg-slate-800')) {
+                        btn.classList.add('bg-slate-800', 'text-white');
+                    }
+                } else {
+                    btn.className = btn.className.replace('bg-slate-800', '').replace('text-white', 'text-slate-400');
+                }
+            });
+
+            // Modification visuelle des cartes
+            Object.keys(nexusData).forEach(k => {
+                const cardEl = document.getElementById(`node-${k}`);
+                if (cardEl) {
+                    if (status === 'all' || nexusData[k].status === status) {
+                        cardEl.classList.remove('opacity-25', 'pointer-events-none');
+                        cardEl.classList.add('opacity-100');
+                    } else {
+                        cardEl.classList.remove('opacity-100');
+                        cardEl.classList.add('opacity-25', 'pointer-events-none');
+                    }
+                }
+            });
+        }
+
+        // Déclenchement manuel d'une étape de la console de cycle
+        const stepsConfig = {
+            1: { node: 'user', name: "Demande", log: "Demande et contexte utilisateur reçus. Lancement du processus d'alignement avec les principes NEXUS.", label: "DEMANDE CONTEXTUELLE" },
+            2: { node: 'n95', name: "Génération (95)", log: "Générateur 95 activé. Exploration d'idées libres de barrières et élaboration de pistes spéculatives.", label: "CRÉATION DE SOLUTIONS" },
+            3: { node: 'n96', name: "Analyse (96)", log: "Réacteur 96 en charge. Filtrage multi-critères : opportunité, pertinence et conformité constitutionnelle.", label: "ÉVALUATION DU SENS" },
+            4: { node: 'zero', name: "Confrontation (Arène Zéro)", log: "Passage par l'Arène Zéro soutenu par Source-1. Friction des concepts concurrents.", label: "DÉBAT & ARBITRAGE" },
+            5: { node: 'n97', name: "Exécution (97)", log: "Exécuteur 97 actif. Matérialisation de la solution sélectionnée sous forme de code ou d'action.", label: "RÉALISATION PROTOTYPE" },
+            6: { node: 'n92', name: "Perfection (92)", log: "Améliorateur 92 requis. Refactoring esthétique, optimisation d'efficience et réduction de complexité.", label: "MAÎTRISE & FINITION" },
+            7: { node: 'memory', name: "Mémorisation", log: "Enregistrement de l'état d'expérience (causes réelles, causalité) dans la Mémoire Centrale.", label: "LOG D'EXPÉRIENCE" },
+            8: { node: 'sensors', name: "Évaluation (Capteurs)", log: "Télémétrie en cours chez l'utilisateur et mesure d'impact réel pour valider la résolution.", label: "MESURE EFFET RÉEL" },
+            9: { node: 'creator', name: "Évolution", log: "Analyse d'écart. Mise à jour de la maturité et boucle de retour prête pour le cycle suivant.", label: "ADAPTATION TERMINÉE" }
+        };
+
+        function triggerStep(stepNum) {
+            // Reset de l'apparence des boutons de pas
+            for (let i = 1; i <= 9; i++) {
+                const stepBtn = document.getElementById(`step-${i}`);
+                if (stepBtn) {
+                    stepBtn.className = "p-2 rounded-xl bg-slate-950 border border-slate-800 hover:border-slate-700 text-center transition-all-300";
+                }
+            }
+
+            // Surlignage du pas en cours
+            const activeBtn = document.getElementById(`step-${stepNum}`);
+            if (activeBtn) {
+                activeBtn.className = "p-2 rounded-xl bg-emerald-950/20 border-2 border-emerald-500 text-center transition-all-300 shadow-[0_0_12px_rgba(16,185,129,0.3)]";
+            }
+
+            const step = stepsConfig[stepNum];
+            if (step) {
+                inspectNode(step.node);
+                document.getElementById('cycle-step-active').textContent = `Étape active : ${step.name}`;
+                
+                const terminalLogs = document.getElementById('terminal-logs');
+                terminalLogs.innerHTML = `<span class="text-emerald-400 font-bold">[Etape ${stepNum}] :</span> ${step.log}`;
+                terminalLogs.scrollTop = terminalLogs.scrollHeight;
+
+                const badge = document.getElementById('terminal-step-badge');
+                badge.textContent = step.label;
+                badge.className = "text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-bold";
+            }
+        }
+
+        // Simulation de cycle automatique continue
+        function startAutoCycle() {
+            if (isLoopRunning) {
+                // Arrêt de la boucle
+                isLoopRunning = false;
+                if (loopTimeout) clearTimeout(loopTimeout);
+                
+                document.getElementById('main-loop-text').textContent = "Lancer le Cycle";
+                document.getElementById('main-loop-icon').className = "fa-solid fa-circle-play";
+                document.getElementById('terminal-logs').textContent = "Simulation arrêtée. Prêt à reprendre.";
+                document.getElementById('terminal-step-badge').textContent = "IDLE";
+                document.getElementById('cycle-step-active').textContent = "Étape active : Aucune";
+                resetHighlights();
+                
+                // Réinitialiser les pas
+                for (let i = 1; i <= 9; i++) {
+                    const stepBtn = document.getElementById(`step-${i}`);
+                    if (stepBtn) {
+                        stepBtn.className = "p-2 rounded-xl bg-slate-950 border border-slate-800 hover:border-slate-700 text-center transition-all-300";
+                    }
+                }
+                return;
+            }
+
+            isLoopRunning = true;
+            document.getElementById('main-loop-text').textContent = "Arrêter le Cycle";
+            document.getElementById('main-loop-icon').className = "fa-solid fa-circle-stop text-red-500 animate-pulse";
+
+            let currentStep = 1;
+            function run() {
+                if (!isLoopRunning) return;
+                triggerStep(currentStep);
+                currentStep++;
+                if (currentStep > 9) {
+                    currentStep = 1; // Relancer à l'infini
+                }
+                loopTimeout = setTimeout(run, 2800); // 2.8 secondes par étape
+            }
+            run();
+        }
+
+        // Chargement initial
+        window.onload = function() {
+            // Sélection initiale par défaut du Créateur
+            inspectNode('creator');
+        }
+    </script>
+</body>
+</html>
