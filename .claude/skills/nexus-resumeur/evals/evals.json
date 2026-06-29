@@ -1,0 +1,23 @@
+{
+  "skill_name": "nexus-resumeur",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Analyse les ventes du T4 dans ce fichier xlsx, trouve les 3 produits qui décrochent et explique pourquoi, puis propose une action pour chacun.",
+      "expected_output": "Réponse d'analyse complète, CLÔTURÉE par un bloc Résumé (2-3 phrases) + Points clés (3-5 puces, dont la plus importante en premier).",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "C'est quoi la capitale de l'Australie ?",
+      "expected_output": "Réponse brève (Canberra) SANS bloc résumé — cas trivial, le skill ne doit pas se déclencher.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "Construis-moi un petit script Python qui renomme en masse les photos d'un dossier par date de prise de vue, et teste-le.",
+      "expected_output": "Script + test, CLÔTURÉ par Résumé + Points clés, avec le nom du fichier à ouvrir dans les puces.",
+      "files": []
+    }
+  ]
+}
