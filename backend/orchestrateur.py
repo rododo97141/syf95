@@ -214,6 +214,33 @@ def detecter_et_filtrer(etat: dict, filtre: FiltreAdmission) -> None:
 # ---------------------------------------------------------------------------
 # La boucle (loop engineering)
 # ---------------------------------------------------------------------------
+def _capter_tache(tache: dict, tier: str) -> None:
+    """Capture SIMPLE : un capteur par tâche traitée, via nexus_sense (mode bibliothèque).
+    Import paresseux de organes/ (pas au niveau module). feedback/impact restent VIDES
+    (jugement externe — anti-Goodhart). La capture ne doit JAMAIS casser la boucle."""
+    try:
+        import os
+        import sys
+        _org = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "organes"
+        )
+        if _org not in sys.path:
+            sys.path.insert(0, _org)
+        import nexus_sense
+        statut = "ok" if tache["etat"] == "fait" else "bloque"
+        nexus_sense.log_event(
+            tache=tache["libelle"],
+            statut=statut,
+            mode="auto",
+            difficulte="moyen",
+            tier=tier,
+            feedback=None,
+            impact=None,
+        )
+    except Exception:
+        return
+
+
 def tourner(chemin_etat: Path, pas: int | None = None,
             moteur: Moteur | None = None) -> dict:
     """
@@ -271,6 +298,8 @@ def tourner(chemin_etat: Path, pas: int | None = None,
         etat["journal"].append(
             f"{_horodatage()} · {tache['id']} → {tache['etat']} ({motif})"
         )
+        # Capture simple : un capteur par tâche (mémoire vivante via nexus_sense).
+        _capter_tache(tache, reco["tier"])
         sauver_etat(chemin_etat, etat)  # ← persistance APRÈS CHAQUE tâche
         traitees += 1
 
