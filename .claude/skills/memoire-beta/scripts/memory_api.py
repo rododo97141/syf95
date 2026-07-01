@@ -33,6 +33,7 @@ Endpoints :
 
 import os
 import re
+import math
 import json
 import datetime
 import shutil
@@ -305,11 +306,97 @@ def _scan(base, query, etage, fdomain=None, fcategory=None):
                 continue
             with open(os.path.join(dirpath, fl), "r", encoding="utf-8") as f:
                 text = f.read()
-            if query and query not in text.lower() and query not in fl.lower():
-                continue
+            # Plus de filtre sous-chaîne ici : on collecte tous les candidats
+            # (texte + nom de fiche minusculisés dans « _search ») et c'est le
+            # classement pertinence(IDF) × force, dans recall(), qui trie et
+            # écarte les fiches sans aucun token de la requête.
             out.append({"etage": etage, "domain": domain, "category": category,
-                        "file": fl, "path": rel, "excerpt": text[:400]})
+                        "file": fl, "path": rel, "excerpt": text[:400],
+                        "_search": (text + " " + fl).lower()})
     return out
+
+
+# --------------------------------------------------------------------------- #
+# Classement pertinence(IDF) × force
+# --------------------------------------------------------------------------- #
+_TOKEN_RE = re.compile(r"[0-9a-zà-ÿ_]+", re.IGNORECASE)
+
+
+def _tokens(s):
+    return _TOKEN_RE.findall((s or "").lower())
+
+
+def load_forces():
+    """Lit ROOT/forces.json = {fiche: multiplicateur}. Renvoie {} si absent ou
+    illisible. Les valeurs sont coercées en float, les clés en str."""
+    path = os.path.join(ROOT, "forces.json")
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if isinstance(data, dict):
+            out = {}
+            for k, v in data.items():
+                try:
+                    out[str(k)] = float(v)
+                except (TypeError, ValueError):
+                    continue
+            return out
+    except (OSError, ValueError):
+        pass
+    return {}
+
+
+def _force_for(forces, fl, rel):
+    """Multiplicateur d'une fiche : clé = nom complet, radical (sans .md) ou
+    chemin relatif. Défaut 1.0 si absente de forces.json."""
+    stem = fl[:-3] if fl.endswith(".md") else fl
+    for key in (fl, stem, rel):
+        if key in forces:
+            return forces[key]
+    return 1.0
+
+
+def rank_candidates(query, cands, forces=None):
+    """Classe des candidats (chacun portant la clé « _search ») par
+    pertinence(IDF) × force, sans les modifier en place.
+
+    Pertinence = somme des IDF des tokens *distincts* de la requête présents
+    dans la fiche (présence binaire : le bourrage de mots-clés n'élève pas le
+    score). IDF lissé = log((N+1)/(df+1)) + 1 : ~1 pour un token présent
+    partout (aucun gagnant confiant), élevé pour un token rare/distinctif.
+
+    Renvoie une nouvelle liste triée par score décroissant (départage stable
+    par chemin puis nom), chaque élément enrichi de « _relevance », « _force »
+    et « _score »."""
+    if forces is None:
+        forces = load_forces()
+    qtokens = list(dict.fromkeys(_tokens(query)))          # dédup, ordre stable
+    n = len(cands) or 1
+    cand_tokens = [set(_tokens(c.get("_search", ""))) for c in cands]
+    df = {t: 0 for t in qtokens}
+    for toks in cand_tokens:
+        for t in qtokens:
+            if t in toks:
+                df[t] += 1
+    idf = {t: math.log((n + 1) / (df[t] + 1)) + 1.0 for t in qtokens}
+    ranked = []
+    for c, toks in zip(cands, cand_tokens):
+        rel = sum(idf[t] for t in qtokens if t in toks)
+        force = _force_for(forces, c.get("file", ""), c.get("path", ""))
+        item = dict(c)
+        item["_relevance"] = rel
+        item["_force"] = force
+        item["_score"] = rel * force
+        ranked.append(item)
+    ranked.sort(key=lambda x: (-x["_score"], x.get("path", ""), x.get("file", "")))
+    return ranked
+
+
+def _strip_internal(item):
+    """Ne garde que la forme de retour publique (etage/domain/category/...)."""
+    return {"etage": item["etage"], "domain": item["domain"],
+            "category": item["category"], "file": item["file"],
+            "path": item["path"], "excerpt": item["excerpt"]}
 
 
 def recall(params):
@@ -328,7 +415,11 @@ def recall(params):
         results += _scan(BRUT, query, "brut")
     if scope == "archive" and not fdomain and not fcategory:
         results += _scan(ARCHIVE, query, "archive")
-    return {"ok": True, "scope": scope, "count": len(results), "results": results}
+    if query:
+        ranked = rank_candidates(query, results)
+        results = [r for r in ranked if r["_relevance"] > 0]
+    out = [_strip_internal(r) for r in results]
+    return {"ok": True, "scope": scope, "count": len(out), "results": out}
 
 
 # --------------------------------------------------------------------------- #
