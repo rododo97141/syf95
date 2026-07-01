@@ -101,17 +101,30 @@ Raccourci quand le classement est déjà sûr (même logique anti-doublon que pr
 | `title`,`summary`,`source` | non | métadonnées |
 
 ## GET /recall
-Recherche par mot-clé / filtre.
+Recherche par mot-clé / filtre, **classée** (ce n'est plus un simple filtre sous-chaîne).
 
 | Paramètre | Description |
 |---|---|
-| `query` | sous-chaîne (insensible à la casse) |
+| `query` | tokens recherchés (classement pertinence × force, voir plus bas) |
 | `scope` | `all` (défaut), `brut`, `en_attente`, `structure` |
 | `domain`,`category` | filtres (étage structure) |
 
 ```json
 { "ok":true, "scope":"all", "count":2, "results":[{etage,domain,category,file,path,excerpt}] }
 ```
+Forme de retour **inchangée** (`etage/domain/category/file/path/excerpt`).
+
+**Classement pertinence(IDF) × force.** Une fiche ne remonte plus par simple présence de la
+sous-chaîne : le score est `pertinence × force`.
+- **Pertinence** = somme des IDF des tokens *distincts* de `query` trouvés dans la fiche
+  (présence binaire — bourrer un mot-clé ne fait pas monter le score). Un token rare/distinctif
+  pèse plus qu'un token présent dans la moitié des fiches (pas de faux gagnant confiant sur un
+  mot très courant).
+- **Force** = multiplicateur par fiche lu dans `ROOT/forces.json` (`{"fiche-slug": 1.4, …}`,
+  défaut `1.0` si absent). C'est ce fichier que la boucle orchestrateur alimente au fil de
+  l'usage réel (voir `organes/nexus_force.py`) : une fiche rappelée puis réutilisée avec succès
+  voit sa force monter et remonte donc plus haut dans les prochains `recall`.
+- Une fiche sans **aucun** token de `query` n'apparaît pas dans les résultats.
 
 ## GET /stats — jauge + alerte
 

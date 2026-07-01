@@ -26,6 +26,10 @@ Usage :
   python3 nexus_pont.py               # génère / complète les brouillons (capteurs → brouillons)
   python3 nexus_pont.py --montrer     # affiche les brouillons en attente (hors déjà promus)
   python3 nexus_pont.py --promouvoir  # brouillons REMPLIS → vraies leçons (journal.jsonl)
+
+Voir aussi : `nexus_force.py`, le pont sœur capteurs → forces.json (mémoire-beta),
+qui lit les mêmes capteurs mais isole ceux porteurs d'un champ `fiche` (recall
+utilisé par la boucle orchestrateur) pour faire vivre le classement `recall`.
 """
 import os, sys, json, argparse, datetime
 

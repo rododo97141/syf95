@@ -122,15 +122,66 @@ def planifier(chemin_etat: Path) -> dict:
 # ---------------------------------------------------------------------------
 # Organe 97 : agit (STUB)
 # ---------------------------------------------------------------------------
-def executer_tache(tache: dict, moteur: Moteur) -> dict:
+def _memoire_api_defaut():
+    """Import paresseux de memory_api (mémoire-beta), en mode bibliothèque.
+    Retourne None si indisponible : le recall ne doit JAMAIS casser la boucle."""
+    try:
+        import os
+        import sys
+        _scripts = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            ".claude", "skills", "memoire-beta", "scripts",
+        )
+        if _scripts not in sys.path:
+            sys.path.insert(0, _scripts)
+        import memory_api
+        return memory_api
+    except Exception:
+        return None
+
+
+def _rappeler_fiche(libelle: str, memoire) -> dict | None:
+    """Consulte le recall (déjà classé pertinence(IDF) × force) sur le libellé
+    de la tâche et renvoie la meilleure fiche trouvée, ou None. Ne lève jamais."""
+    try:
+        reponse = memoire.recall({"query": [libelle], "scope": ["all"]})
+        resultats = reponse.get("results") or []
+        return resultats[0] if resultats else None
+    except Exception:
+        return None
+
+
+def executer_tache(tache: dict, moteur: Moteur, memoire=None) -> dict:
     """
     STUB de l'organe 97 : agit en s'appuyant sur un Moteur (l'IA injectée).
     L'IA est INTERCHANGEABLE — `MoteurMock` en test/hors-ligne, `AdaptateurAPI`
     (Claude/Gemini/GPT/Kimi) en production — sans rien changer ici.
+
+    La MÉMOIRE est interchangeable elle aussi (même logique d'injection que le
+    Moteur) : avant l'appel, on consulte le recall (mémoire-beta) sur le
+    libellé de la tâche et on injecte la meilleure fiche trouvée dans le
+    prompt. `memoire=None` (défaut) importe paresseusement la vraie mémoire ;
+    les tests injectent une instance isolée.
     """
+    if memoire is None:
+        memoire = _memoire_api_defaut()
+
     prompt = f"Réalise la tâche NEXUS suivante : {tache['libelle']}"
+    fiche_slug = None
+    if memoire is not None:
+        fiche = _rappeler_fiche(tache["libelle"], memoire)
+        if fiche is not None:
+            nom = fiche.get("file", "")
+            fiche_slug = nom[:-3] if nom.endswith(".md") else nom
+            prompt += (
+                f"\n\n[Mémoire rappelée : {fiche_slug}]\n{fiche.get('excerpt', '')}"
+            )
+
     sortie = moteur.generer(prompt)
-    return {"sortie": f"[97] {sortie}", "ok": True}
+    resultat = {"sortie": f"[97] {sortie}", "ok": True}
+    if fiche_slug:
+        resultat["fiche"] = fiche_slug
+    return resultat
 
 
 # ---------------------------------------------------------------------------
@@ -241,8 +292,55 @@ def _capter_tache(tache: dict, tier: str) -> None:
         return
 
 
+def _capter_usage_fiche(tache: dict, fiche_slug: str, statut: str, tier: str) -> None:
+    """Capture DÉDIÉE : quand une fiche rappelée (recall) a servi à une tâche,
+    un capteur distinct trace laquelle et si elle a aidé (succes) ou non
+    (echec) — c'est la matière brute du pont vers forces.json (brique 3).
+    Import paresseux, jamais bloquant (même garde-fou que `_capter_tache`)."""
+    try:
+        import os
+        import sys
+        _org = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "organes"
+        )
+        if _org not in sys.path:
+            sys.path.insert(0, _org)
+        import nexus_sense
+        nexus_sense.log_event(
+            tache=tache["libelle"],
+            statut=statut,
+            mode="auto",
+            difficulte="moyen",
+            tier=tier,
+            fiche=fiche_slug,
+            feedback=None,
+            impact=None,
+        )
+    except Exception:
+        return
+
+
+def _appliquer_forces() -> None:
+    """Pont capteurs → forces.json (brique 3) : recalcule et écrit les
+    multiplicateurs de force à partir des capteurs `fiche=...` accumulés.
+    N'est appelé que si au moins une fiche a servi durant ce passage (jamais
+    d'écriture superflue). Ne lève jamais (protège la boucle)."""
+    try:
+        import os
+        import sys
+        _org = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "organes"
+        )
+        if _org not in sys.path:
+            sys.path.insert(0, _org)
+        import nexus_force
+        nexus_force.appliquer()
+    except Exception:
+        return
+
+
 def tourner(chemin_etat: Path, pas: int | None = None,
-            moteur: Moteur | None = None) -> dict:
+            moteur: Moteur | None = None, memoire=None) -> dict:
     """
     Exécute la boucle : planifie → exécute → vérifie → écrit l'état → reprend.
 
@@ -253,6 +351,9 @@ def tourner(chemin_etat: Path, pas: int | None = None,
     `moteur` : l'IA injectée qu'utilise l'organe 97 (injection de dépendance).
     Par défaut `MoteurMock` (déterministe, hors-ligne) : la boucle tourne sans
     réseau ni clé d'API.
+
+    `memoire` : la mémoire (recall) injectée, même logique. Par défaut, import
+    paresseux de la vraie mémoire-beta ; `None` restant possible si absente.
     """
     if moteur is None:
         moteur = MoteurMock()
@@ -265,6 +366,7 @@ def tourner(chemin_etat: Path, pas: int | None = None,
     sauver_etat(chemin_etat, etat)
 
     traitees = 0
+    fiches_utilisees = False
     for index, tache in enumerate(etat["taches"]):
         if tache["etat"] != "a_faire":
             continue  # déjà faite ou bloquée → on saute (c'est la reprise)
@@ -284,8 +386,8 @@ def tourner(chemin_etat: Path, pas: int | None = None,
             f"{_horodatage()} · dosage {tache['id']} → {reco['tier']} ({reco['raison']})"
         )
 
-        # 97 agit (via le Moteur injecté).
-        resultat = executer_tache(tache, moteur)
+        # 97 agit (via le Moteur injecté ; consulte la mémoire avant d'agir).
+        resultat = executer_tache(tache, moteur, memoire)
         tache["resultat"] = resultat["sortie"]
 
         # 96 + 98 vérifient.
@@ -300,8 +402,17 @@ def tourner(chemin_etat: Path, pas: int | None = None,
         )
         # Capture simple : un capteur par tâche (mémoire vivante via nexus_sense).
         _capter_tache(tache, reco["tier"])
+        # Une fiche rappelée a servi : capteur dédié (fiche=slug, succes|echec).
+        if resultat.get("fiche"):
+            statut_fiche = "succes" if tache["etat"] == "fait" else "echec"
+            _capter_usage_fiche(tache, resultat["fiche"], statut_fiche, reco["tier"])
+            fiches_utilisees = True
         sauver_etat(chemin_etat, etat)  # ← persistance APRÈS CHAQUE tâche
         traitees += 1
+
+    if fiches_utilisees:
+        # Pont capteurs → forces.json : la force devient vivante (brique 3).
+        _appliquer_forces()
 
     sauver_etat(chemin_etat, etat)
     return etat

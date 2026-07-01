@@ -99,6 +99,12 @@ curl -s "http://127.0.0.1:8077/recall?domain=crypto&category=finance"
 Pour répondre à un besoin : lis d'abord `/domains` (la carte), descends la bonne branche,
 ne ressors que le pertinent.
 
+`/recall` **classe** les résultats (pertinence IDF × force, `ROOT/forces.json`) au lieu de
+filtrer par sous-chaîne — détail dans `references/api.md`. La boucle orchestrateur
+(`backend/orchestrateur.py`) **consulte automatiquement ce recall avant chaque tâche** et
+capte (via `nexus_sense`) quand une fiche a servi ; `organes/nexus_force.py` transforme cet
+usage en force vivante — la mémoire qui sert vraiment remonte toute seule.
+
 ## Cycle de vie (anti-explosion)
 
 La mémoire ne doit ni exploser, ni se noyer dans le bruit. Trois leviers :

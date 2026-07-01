@@ -28,13 +28,14 @@ def _chemins():
     d = os.path.join(base, "capteurs") if base else DIR
     return d, os.path.join(d, "journal.jsonl")
 
-STATUTS = ("ok", "partiel", "echec")
+STATUTS = ("ok", "partiel", "echec", "succes")
 MODES = ("auto", "assiste")
 FEEDBACKS = ("pos", "neg")
 QUALITES = ("validee", "reprise")  # validée du 1er coup, ou a nécessité une reprise
 
 def log_event(tache, statut="ok", mode="assiste", duree_min=None, feedback=None,
-              qualite=None, tokens=None, impact=None, difficulte=None, tier=None, note=None):
+              qualite=None, tokens=None, impact=None, difficulte=None, tier=None,
+              note=None, fiche=None):
     """Ecrit UN capteur (une ligne JSONL) et renvoie l'evenement.
     Fonction propre, reutilisable par la boucle (mode bibliotheque). Une seule logique d'ecriture."""
     d, journal = _chemins()
@@ -52,6 +53,7 @@ def log_event(tache, statut="ok", mode="assiste", duree_min=None, feedback=None,
         "difficulte": difficulte,  # facile/moyen/dur : pour normaliser le progrès (rigueur)
         "tier": tier,           # intensité d'orchestration RÉELLEMENT utilisée (SOLO/DUO/CONSEIL)
         "note": note,
+        "fiche": fiche,         # slug de la fiche mémoire (recall) qui a servi, ou None
     }
     with open(journal, "a", encoding="utf-8") as f:
         f.write(json.dumps(event, ensure_ascii=False) + "\n")
@@ -62,6 +64,7 @@ def log(args):
         tache=args.tache, statut=args.statut, mode=args.mode, duree_min=args.duree,
         feedback=args.feedback, qualite=args.qualite, tokens=args.tokens,
         impact=args.impact, difficulte=args.difficulte, tier=args.tier, note=args.note,
+        fiche=args.fiche,
     )
     print(f"🟢 capté : [{event['statut']}/{event['mode']}] {event['tache']}"
           + (f" · feedback {event['feedback']}" if event['feedback'] else ""))
@@ -146,6 +149,7 @@ def main():
     pl.add_argument("--difficulte", choices=("facile", "moyen", "dur"), default=None, help="difficulté (pour normaliser le progrès)")
     pl.add_argument("--tier", choices=("SOLO", "DUO", "CONSEIL"), default=None, help="intensité d'orchestration utilisée (boucle la mesure)")
     pl.add_argument("--note", default=None)
+    pl.add_argument("--fiche", default=None, help="slug de la fiche mémoire (recall) qui a servi")
     pl.set_defaults(func=log)
     ps = sub.add_parser("stats", help="résumer ce qui a été senti")
     ps.set_defaults(func=stats)

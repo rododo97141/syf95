@@ -105,6 +105,21 @@ elle-même), dans la limite du **budget de génération**.
 `bloque` et n'est pas rejouée (lever le veto demandera une autorisation
 explicite — cf. « reste à faire »).
 
+**Mémoire câblée dans la boucle.** Avant d'appeler le `Moteur`, `executer_tache`
+consulte le **recall** de la mémoire-beta (`.claude/skills/memoire-beta/scripts/
+memory_api.py`, injection de dépendance comme le `Moteur` — `memoire=None` par
+défaut importe paresseusement la vraie mémoire) sur le libellé de la tâche, et
+injecte la meilleure fiche trouvée dans le prompt. Quand une fiche a servi, un
+capteur **dédié** est loggué via `organes/nexus_sense.py`
+(`fiche=<slug>`, `statut=succes|echec`) — distinct du capteur générique déjà
+posé par tâche. `organes/nexus_force.py` (le pont capteurs → forces) recalcule
+ensuite `ROOT/forces.json` à partir de cet historique : une fiche rappelée puis
+réutilisée avec succès voit sa **force monter**, et remonte donc plus haut dans
+les prochains `recall` (classement pertinence(IDF) × force — voir
+`.claude/skills/memoire-beta/references/api.md`). Rien de tout ça ne casse la
+boucle : chaque étape (recall, capteur dédié, pont forces) est protégée par un
+import paresseux + `try/except` qui avale l'erreur en silence.
+
 ### Contrat d'état JSON (extrait réel)
 
 ```json
@@ -374,7 +389,7 @@ pip install -r backend/requirements-dev.txt   # installe pytest (dev uniquement)
 python3 -m pytest backend/tests -q
 ```
 
-Résultat attendu : **`78 passed`**. Couverture : filtre d'admission
+Résultat attendu (à date) : **`99 passed`**. Couverture : filtre d'admission
 (périphérique rejeté, central retenu, file saturée, budget, coût nul, tri),
 moteur (mock déterministe, interface abstraite, **clé absente → erreur claire**,
 extraction OpenAI, injection dans l'orchestrateur), transcription (repli propre,
@@ -386,7 +401,11 @@ SOLO sans surcoût, ordre SOLO < DUO < CONSEIL), **évaluateur consultatif**
 signalée, transitif bruité concordant, recommandation jamais décision), **câblage
 96 → évaluateur** (96 appelle l'évaluateur et expose la recommandation sans trancher,
 cas sans comparaisons inchangé, signaux cycle/séparation remontés, **trace JSONL
-écrite à chaque appel**, `suivi` renseignable, 96 logue mais n'obéit pas).
+écrite à chaque appel**, `suivi` renseignable, 96 logue mais n'obéit pas), **mémoire
+câblée dans la boucle** (recall consulté et injecté dans le prompt, fiche absente
+→ prompt non pollué, capteur dédié `fiche=slug`/`statut=succes|echec` émis
+seulement quand une fiche a servi, **une tâche qui réutilise une fiche fait
+monter sa force** dans `forces.json`, aucune écriture si aucune fiche n'a servi).
 
 ---
 
@@ -402,7 +421,13 @@ cas sans comparaisons inchangé, signaux cycle/séparation remontés, **trace JS
 - **File d'attente vivante** : faire varier `taille_file` en cours d'exécution
   (le seuil dynamique réagirait en temps réel ; il est mesuré une fois par cycle).
 - **Oreille réelle** : choix du modèle Whisper, langue, horodatage des segments.
-- **Mémoire partagée** entre la boucle et la mémoire de l'écosystème.
+- **Mémoire partagée entre la boucle et la mémoire de l'écosystème** ✅ (recall
+  consulté avant chaque tâche, capteur dédié fiche=slug, pont capteurs →
+  `forces.json`). **Reste** : injecter aussi la fiche rappelée en cours
+  d'exécution (pas seulement avant), et une vraie réconciliation
+  `en_attente ↔ structure` (`organes/nexus_reconcile.py --apply`) sur les
+  fiches réelles de l'écosystème — non exécutable depuis ce dépôt (les données
+  `memoire_data/` vivent hors du dépôt git, en local).
 - **Observabilité** : métriques (taux d'admission, budget consommé, vetos),
   rotation du journal.
 - **Robustesse** : reprise après corruption, verrouillage multi-boucles.
