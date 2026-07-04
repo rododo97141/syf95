@@ -17,15 +17,24 @@ Doctrine :
     ne vieillit pas.
   - VIVANTE = ni remplacée, ni éteinte par l'horloge d'activité.
 
-Garde-fou : ce module LIT la table de liaison, il ne l'écrit JAMAIS
-(seul nexus_pont écrit brouillons_promus.jsonl, append-only).
+Garde-fous :
+  - Ce module LIT la table de liaison, il ne l'écrit JAMAIS (seul nexus_pont
+    écrit brouillons_promus.jsonl, append-only).
+  - L'identité d'une source est dérivée par UNE seule fonction canonique,
+    nexus_pont._cle (celle qui pose _source.cle à l'ingestion) — importée ici,
+    jamais dupliquée : ingestion et lecture ne peuvent pas diverger.
 
 Rétrocompatibilité : les anciennes lignes {cle, promu_le} (sans lecon_ref)
 restent valides — pas de lecon_ref = source NON remplacée.
 """
-import os, json
+import os, sys, json
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+if SCRIPT_DIR not in sys.path:
+    sys.path.insert(0, SCRIPT_DIR)
+# Source CANONIQUE de la dérivation d'identité (_cle) : celle qui pose _source.cle
+# à l'ingestion. Le lecteur (vie) importe le writer (pont), jamais l'inverse.
+import nexus_pont
 
 # INTERIMAIRE : seuil de récence en nombre de runs, choisi à la louche en
 # attendant des mesures réelles (96 pourra le calibrer). Paramétrable partout.
@@ -60,11 +69,14 @@ def lire_liaisons():
 
 
 def cle_source(rec):
-    """Clé d'une source : soit déjà une clé (str), soit un événement capteur
-    (même identité que nexus_pont._cle : « ts|tache »)."""
+    """Clé d'une source : soit déjà une clé (str), soit un événement capteur.
+    La dérivation depuis un événement est DÉLÉGUÉE à nexus_pont._cle — LA
+    fonction canonique, celle-là même qui pose _source.cle à l'ingestion des
+    brouillons. UNE seule dérivation dans tout l'organisme : le désaccord
+    ingestion/lecture est impossible par construction."""
     if isinstance(rec, str):
         return rec
-    return f"{rec.get('ts','')}|{rec.get('tache','')}"
+    return nexus_pont._cle(rec)
 
 
 def _cle_liaison(ligne):

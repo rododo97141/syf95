@@ -194,6 +194,33 @@ def test_lire_liaisons_table_absente_ne_cree_rien(tmp_path, monkeypatch):
 
 
 # ---------------------- BOUT EN BOUT (pont → vie) ----------------------
+def test_integration_vraie_chaine_capteur_ingestion_promotion_vie(tmp_path, monkeypatch):
+    """LA vraie chaîne, sans clé fabriquée à la main : un événement capteur réel
+    (nexus_sense) → ingestion réelle qui pose _source.cle (construire_brouillons)
+    → promotion réelle qui écrit la liaison → est_vivant(capteur original) doit
+    le voir REMPLACÉ. Garde-fou contre toute double dérivation de l'identité :
+    si l'ingestion et nexus_vie ne calculent pas la même clé, ce test casse."""
+    vie = _setup(tmp_path, monkeypatch)
+    import nexus_sense, nexus_pont
+    nexus_sense.log_event(tache="analyse video qui gele", statut="echec")
+    capteur = nexus_sense.lire()[0]                     # l'événement ORIGINAL, tel que capté
+
+    nexus_pont.construire_brouillons()                  # vraie ingestion : pose _source.cle
+    chemin_b = os.path.join(nexus_pont._dir_lecons(), "brouillons.jsonl")
+    brouillon = [json.loads(l) for l in open(chemin_b, encoding="utf-8") if l.strip()][0]
+    # même identité des deux côtés : la dérivation est UNIQUE, pas dédoublée
+    assert brouillon["_source"]["cle"] == vie.cle_source(capteur)
+
+    brouillon["lecon"] = "verifier l'etat avant de lancer"
+    with open(chemin_b, "w", encoding="utf-8") as f:    # Kily remplit le brouillon
+        f.write(json.dumps(brouillon, ensure_ascii=False) + "\n")
+    assert nexus_pont.promouvoir_brouillons()["promus"] == 1
+
+    liaisons = vie.lire_liaisons()
+    assert vie.est_remplacee(capteur, liaisons) is True
+    assert vie.est_vivant(capteur, liaisons, runs_propres=0) is False
+
+
 def test_bout_en_bout_promotion_rend_la_source_remplacee(tmp_path, monkeypatch):
     """La promotion (nexus_pont) écrit la liaison ; nexus_vie la voit :
     la source promue n'est plus vivante, une autre source fraîche l'est encore."""
