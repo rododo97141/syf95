@@ -1,7 +1,7 @@
 """Tests du pont capteurs → leçons (nexus_pont) : génération + promotion.
 Isolés : capteurs via CAPTEURS_ROOT, leçons/brouillons via LECONS_ROOT, tmp jetable.
 Ne touchent jamais le vrai memoire_data/."""
-import os, sys, json
+import os, sys, json, hashlib
 
 
 def _organes():
@@ -128,6 +128,111 @@ def test_promouvoir_est_idempotent(tmp_path, monkeypatch):
     assert s1["promus"] == 1
     assert s2["promus"] == 0 and s2["deja_promus"] == 1
     assert len(_lire(str(dir_lecons / "journal.jsonl"))) == 1   # pas de doublon
+
+
+# ------------- LIAISON SOURCE → LEÇON (chantier « remplace_par ») -------------
+def _rempli(cle, lecon, ts="2026-06-30T10:00:00", contexte="ctx"):
+    return {"ts": ts, "type": "methode", "contexte": contexte,
+            "lecon": lecon, "correctif": "C", "pourquoi": "P",
+            "_source": {"cle": cle}, "_origine": "pont", "_etat": "brouillon"}
+
+
+def test_promotion_ecrit_la_liaison_cle_source_lecon_ref(tmp_path, monkeypatch):
+    sense, pont = _setup(tmp_path, monkeypatch)
+    dir_lecons = _dir_lecons(tmp_path)
+    _ecrire_brouillons(str(dir_lecons), [_rempli("k1", "Mesurer avant de conclure")])
+
+    assert pont.promouvoir_brouillons()["promus"] == 1
+    lignes = _lire(str(dir_lecons / "brouillons_promus.jsonl"))
+    assert len(lignes) == 1
+    l = lignes[0]
+    assert set(l.keys()) == {"cle_source", "lecon_ref", "promu_le"}
+    assert l["cle_source"] == "k1"
+    assert l["promu_le"]
+
+
+def test_lecon_ref_correct_et_stable(tmp_path, monkeypatch):
+    """lecon_ref = ts de la leçon + '#' + sha1 court (8 hex) du champ lecon,
+    recalculable à l'identique de l'extérieur — et STABLE : deux sources promues
+    avec la même leçon partagent la même lecon_ref (N-N : 1 leçon → 2 plaies)."""
+    sense, pont = _setup(tmp_path, monkeypatch)
+    dir_lecons = _dir_lecons(tmp_path)
+    lecon = "Mesurer avant de conclure"
+    _ecrire_brouillons(str(dir_lecons), [_rempli("k1", lecon), _rempli("k2", lecon)])
+
+    assert pont.promouvoir_brouillons()["promus"] == 2
+    lignes = _lire(str(dir_lecons / "brouillons_promus.jsonl"))
+    attendu = "2026-06-30T10:00:00#" + hashlib.sha1(lecon.encode("utf-8")).hexdigest()[:8]
+    assert [l["lecon_ref"] for l in lignes] == [attendu, attendu]
+    assert {l["cle_source"] for l in lignes} == {"k1", "k2"}
+
+
+def test_lecon_ref_differencie_deux_lecons_distinctes(tmp_path, monkeypatch):
+    sense, pont = _setup(tmp_path, monkeypatch)
+    dir_lecons = _dir_lecons(tmp_path)
+    _ecrire_brouillons(str(dir_lecons),
+                       [_rempli("k1", "Leçon A"), _rempli("k2", "Leçon B")])
+    pont.promouvoir_brouillons()
+    refs = [l["lecon_ref"] for l in _lire(str(dir_lecons / "brouillons_promus.jsonl"))]
+    assert len(set(refs)) == 2
+
+
+def test_retrocompat_ancienne_ligne_bloque_la_repromotion(tmp_path, monkeypatch):
+    """Une trace ancienne {cle, promu_le} (sans lecon_ref) reste valide pour
+    l'idempotence : le brouillon correspondant n'est PAS repromu."""
+    sense, pont = _setup(tmp_path, monkeypatch)
+    dir_lecons = _dir_lecons(tmp_path)
+    _ecrire_brouillons(str(dir_lecons), [_rempli("k1", "Leçon A")])
+    os.makedirs(str(dir_lecons), exist_ok=True)
+    with open(str(dir_lecons / "brouillons_promus.jsonl"), "w", encoding="utf-8") as f:
+        f.write(json.dumps({"cle": "k1", "promu_le": "2026-06-01T08:00:00"}) + "\n")
+
+    s = pont.promouvoir_brouillons()
+    assert s["promus"] == 0 and s["deja_promus"] == 1
+    assert not (dir_lecons / "journal.jsonl").exists()   # rien réécrit
+    lignes = _lire(str(dir_lecons / "brouillons_promus.jsonl"))
+    assert lignes == [{"cle": "k1", "promu_le": "2026-06-01T08:00:00"}]   # intacte
+
+
+def test_journal_reste_6_champs_canoniques_malgre_la_liaison(tmp_path, monkeypatch):
+    """La liaison vit dans brouillons_promus.jsonl, PAS dans le journal :
+    la vraie leçon garde ses 6 champs canoniques, sans lecon_ref ni cle_source."""
+    sense, pont = _setup(tmp_path, monkeypatch)
+    dir_lecons = _dir_lecons(tmp_path)
+    _ecrire_brouillons(str(dir_lecons), [_rempli("k1", "Leçon A")])
+    pont.promouvoir_brouillons()
+    l = _lire(str(dir_lecons / "journal.jsonl"))[0]
+    assert set(l.keys()) == {"ts", "type", "contexte", "lecon", "correctif", "pourquoi"}
+
+
+def test_promotion_zero_mutation_empreintes_binaires(tmp_path, monkeypatch):
+    """APPEND-ONLY strict, vérifié au bit près : les journaux existants ne sont
+    jamais mutés — brouillons et capteurs identiques ; journal.jsonl et
+    brouillons_promus.jsonl conservent leur contenu d'avant comme PRÉFIXE binaire."""
+    sense, pont = _setup(tmp_path, monkeypatch)
+    dir_lecons = _dir_lecons(tmp_path)
+    sense.log_event(tache="tache ratee", statut="echec")   # un capteur, témoin
+    _ecrire_brouillons(str(dir_lecons), [_rempli("k1", "Leçon A")])
+    with open(str(dir_lecons / "journal.jsonl"), "w", encoding="utf-8") as f:
+        f.write(json.dumps({"ts": "t0", "type": "echec", "contexte": "vieux",
+                            "lecon": "L0", "correctif": "", "pourquoi": ""}) + "\n")
+    with open(str(dir_lecons / "brouillons_promus.jsonl"), "w", encoding="utf-8") as f:
+        f.write(json.dumps({"cle": "k-ancienne", "promu_le": "t0"}) + "\n")
+
+    _, chemin_capteurs = sense._chemins()
+    fixes = [str(dir_lecons / "brouillons.jsonl"), chemin_capteurs]
+    accrus = [str(dir_lecons / "journal.jsonl"),
+              str(dir_lecons / "brouillons_promus.jsonl")]
+    avant_fixes = [open(c, "rb").read() for c in fixes]
+    avant_accrus = [open(c, "rb").read() for c in accrus]
+
+    assert pont.promouvoir_brouillons()["promus"] == 1
+
+    for c, avant in zip(fixes, avant_fixes):               # identiques au bit près
+        assert open(c, "rb").read() == avant
+    for c, avant in zip(accrus, avant_accrus):             # append-only strict
+        apres = open(c, "rb").read()
+        assert apres.startswith(avant) and len(apres) > len(avant)
 
 
 def test_pont_puis_promouvoir_bout_en_bout(tmp_path, monkeypatch):
