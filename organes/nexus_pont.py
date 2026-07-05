@@ -19,6 +19,9 @@ Garde-fous :
     Les brouillons vont dans un fichier séparé (lecons/brouillons.jsonl).
   - Append-only, idempotent (aucun doublon : dédup par source, et promotion tracée
     dans lecons/brouillons_promus.jsonl). Ne supprime, ne modifie, ne fusionne rien.
+    Ce fichier de trace sert aussi de TABLE DE LIAISON source → leçon :
+    {cle_source, lecon_ref, promu_le} (lue par nexus_vie ; anciennes lignes
+    {cle, promu_le} toujours valides = source non remplacée).
   - N'appelle PAS nexus_lecons et ne le modifie pas : écrit les 6 champs canoniques
     directement, dans le MÊME fichier (car même dossier organes/memoire_data/lecons).
 
@@ -31,7 +34,7 @@ Voir aussi : `nexus_force.py`, le pont sœur capteurs → forces.json (mémoire-
 qui lit les mêmes capteurs mais isole ceux porteurs d'un champ `fiche` (recall
 utilisé par la boucle orchestrateur) pour faire vivre le classement `recall`.
 """
-import os, sys, json, argparse, datetime
+import os, sys, json, argparse, datetime, hashlib
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 if SCRIPT_DIR not in sys.path:
@@ -172,8 +175,19 @@ def _cle_brouillon(b):
 
 
 def _cles_promues():
+    """Clés déjà promues. Deux formats de ligne coexistent dans la table :
+    ancien {cle, promu_le} et nouveau {cle_source, lecon_ref, promu_le}."""
     chemin = os.path.join(_dir_lecons(), "brouillons_promus.jsonl")
-    return {r.get("cle") for r in _lire_jsonl(chemin) if r.get("cle")}
+    return {r.get("cle_source") or r.get("cle")
+            for r in _lire_jsonl(chemin) if r.get("cle_source") or r.get("cle")}
+
+
+def _lecon_ref(vraie):
+    """Référence stable vers une leçon promue : ts de la leçon + hash court
+    (sha1, 8 hex) du champ lecon. Permet à nexus_vie de retrouver quelle leçon
+    remplace quelle source (relation N-N) sans jamais relire le journal."""
+    empreinte = hashlib.sha1((vraie.get("lecon") or "").encode("utf-8")).hexdigest()[:8]
+    return f"{vraie.get('ts','')}#{empreinte}"
 
 
 def promouvoir_brouillons():
@@ -208,7 +222,11 @@ def promouvoir_brouillons():
             "pourquoi": b.get("pourquoi", ""),
         }
         _append_jsonl(chemin_journal, vraie)
-        _append_jsonl(chemin_promus, {"cle": cle, "promu_le": _horodatage()})
+        # Table de liaison source → leçon (lue par nexus_vie, jamais écrite par lui).
+        # Anciennes lignes {cle, promu_le} toujours valides (pas de lecon_ref = non remplacée).
+        _append_jsonl(chemin_promus, {"cle_source": cle,
+                                      "lecon_ref": _lecon_ref(vraie),
+                                      "promu_le": _horodatage()})
         promus.add(cle)
         stats["promus"] += 1
     return stats
