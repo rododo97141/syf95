@@ -42,6 +42,7 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 if SCRIPT_DIR not in sys.path:
     sys.path.insert(0, SCRIPT_DIR)
 import nexus_force  # forces vivantes (forces.json) — LECTURE SEULE, jamais écrit
+import nexus_sense  # capteur JSONL général — observabilité, jamais la force vivante
 
 # ε par défaut si CompteurExploration n'en reçoit pas : petit (« petite
 # probabilité »), paramétrable au constructeur — jamais dans choisir_agent.
@@ -225,6 +226,33 @@ def lire_fiabilite(nom=None):
     return dict(entree) if isinstance(entree, dict) else {i: 0 for i in ISSUES}
 
 
+def _capter_observation(nom):
+    """Miroir d'OBSERVABILITÉ : publie l'événement mécanique d'observer() vers le
+    capteur JSONL général (nexus_sense.log_event), pour que ces issues deviennent
+    visibles à 96/98 et au reste de la boucle sensorielle. DEUXIÈME journalisation
+    en plus de journaliser_fiabilite (fichier SÉPARÉ, INCHANGÉ) — sans jamais
+    influencer la force vivante (forces.json / calculer_forces()).
+
+    statut TOUJOURS "ok", pour les 3 issues confondues : on ne juge pas
+    mécaniquement. "succes"/"echec" sont RÉSERVÉS à un futur jugement humain
+    (HITL) et sont les SEULS statuts que calculer_forces() agrège — écrire "ok"
+    laisse donc la force vivante INERTE (la frontière tient par construction).
+
+    Aucun paramètre note : le détail fin (reponse/timeout/exception) est déjà
+    correctement journalisé par journaliser_fiabilite dans fiabilite_agents.json ;
+    on ne le duplique pas ici. fiche=nom = l'AGENT observé (même usage que
+    fiche=expediteur dans nexus_bus.publier : la force vivante porte sur l'agent,
+    pas sur une fiche mémoire).
+
+    Ne lève JAMAIS (même doctrine défensive que nexus_force.appliquer) : l'échec
+    du capteur ne doit pas remonter à observer() ni casser la boucle appelante."""
+    try:
+        nexus_sense.log_event(
+            tache=f"observer:{nom}", statut="ok", mode="auto", fiche=nom)
+    except Exception:  # noqa: BLE001 — le capteur observe, il ne casse rien
+        pass
+
+
 def observer(nom, action):
     """Boucle d'observation : exécute `action()` (l'appel réel à l'agent) et
     journalise l'issue MÉCANIQUE — reponse / exception / timeout — SANS jamais
@@ -232,14 +260,21 @@ def observer(nom, action):
 
     Un TimeoutError est classé « timeout » ; toute autre exception « exception » ;
     un retour normal « reponse ». L'exception n'est pas relancée : l'observation
-    ne casse pas la boucle appelante (elle observe, elle ne décide de rien)."""
+    ne casse pas la boucle appelante (elle observe, elle ne décide de rien).
+
+    Chaque issue est journalisée DEUX fois : la fiabilité mécanique fine dans le
+    fichier SÉPARÉ (journaliser_fiabilite, INCHANGÉ) ET un miroir d'observabilité
+    vers le capteur général (_capter_observation, statut "ok", jamais la force)."""
     try:
         valeur = action()
     except TimeoutError as exc:
         journaliser_fiabilite(nom, "timeout")
+        _capter_observation(nom)
         return "timeout", exc
     except Exception as exc:  # noqa: BLE001 — on observe TOUTE défaillance
         journaliser_fiabilite(nom, "exception")
+        _capter_observation(nom)
         return "exception", exc
     journaliser_fiabilite(nom, "reponse")
+    _capter_observation(nom)
     return "reponse", valeur
