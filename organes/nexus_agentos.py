@@ -20,32 +20,71 @@ pendant une passe sont des messages comme les autres : elles sont remises
 L'orchestrateur ne connaît que l'interface NexusAdapter (nom(),
 sur_message(msg)) — jamais le fournisseur d'IA derrière (la frontière,
 cf. nexus_adaptateur).
+
+Brique 4 — AJOUT PUR d'un 3e mode de destinataire, "role:<capacité>", à côté
+des modes existants (nommé et étoile), RÉTROCOMPATIBLE : nommé et étoile sont
+strictement inchangés. Sur "role:<capacité>", le routage délègue à
+nexus_orchestrateur.choisir_agent (routage par force vivante, LECTURE SEULE) le
+choix du meilleur agent DISPONIBLE déclarant ce rôle, puis lui remet le message
+avec l'enveloppe résolue à son nom (le CONTENU reste verbatim). Les paramètres
+`forces`/`exploration` sont optionnels : absents, `forces` est chargé en lecture
+seule depuis forces.json et une politique d'exploration fraîche est créée — un
+appelant qui veut du round-robin persistant entre passes fournit la sienne.
 """
+import os
+import sys
+
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+if SCRIPT_DIR not in sys.path:
+    sys.path.insert(0, SCRIPT_DIR)
+import nexus_orchestrateur  # routage par force vivante (brique 4)
+
+PREFIXE_ROLE = "role:"
 
 
-def router(bus, adaptateurs, offset=0):
+def router(bus, adaptateurs, offset=0, forces=None, exploration=None):
     """UNE passe de routage non bloquante.
 
     bus         : module/objet exposant lire_depuis(offset) et publier(msg)
                   (nexus_bus) ;
     adaptateurs : liste d'objets NexusAdapter ;
-    offset      : position de lecture atteinte à la passe précédente.
+    offset      : position de lecture atteinte à la passe précédente ;
+    forces      : (brique 4) dict {agent: force} pour le mode "role:", ou None
+                  → chargé en LECTURE SEULE depuis forces.json au 1er besoin ;
+    exploration : (brique 4) politique d'exploration ε (CompteurExploration) ou
+                  None → une politique fraîche est créée au 1er besoin.
 
     Renvoie (reponses_publiees, nouvel_offset) — repasser nouvel_offset à
     l'appel suivant pour ne router que le neuf (tail-since-offset)."""
     par_nom = {a.nom(): a for a in adaptateurs}
     messages, nouvel_offset = bus.lire_depuis(offset)
     reponses = []
+    _forces = forces            # résolus PARESSEUSEMENT, seulement si "role:"
+    _exploration = exploration  # apparaît (passes nommé/étoile inchangées)
     for msg in messages:
         destinataire = msg.get("destinataire")
+        msg_livre = msg  # par défaut : verbatim (nommé/étoile inchangés)
         if destinataire == "*":  # broadcast : tous sauf l'expéditeur
             cibles = [a for nom, a in par_nom.items()
                       if nom != msg.get("expediteur")]
+        elif isinstance(destinataire, str) and destinataire.startswith(PREFIXE_ROLE):
+            # Brique 4 : routage par force vivante vers le meilleur agent du rôle.
+            if _forces is None:
+                _forces = nexus_orchestrateur.charger_forces()  # LECTURE SEULE
+            if _exploration is None:
+                _exploration = nexus_orchestrateur.CompteurExploration()
+            role = destinataire[len(PREFIXE_ROLE):]
+            cible = nexus_orchestrateur.choisir_agent(
+                role, adaptateurs, _forces, _exploration)
+            cibles = [cible]
+            # Enveloppe résolue au nom concret de l'élu (le CONTENU, lui, reste
+            # verbatim) pour que sur_message reconnaisse le message comme sien.
+            msg_livre = dict(msg, destinataire=cible.nom())
         else:  # pair-à-pair : le destinataire nommé, s'il est branché
             cible = par_nom.get(destinataire)
             cibles = [cible] if cible is not None else []
         for adaptateur in cibles:
-            reponse = adaptateur.sur_message(msg)
+            reponse = adaptateur.sur_message(msg_livre)
             if reponse is not None:
                 reponses.append(bus.publier(reponse))  # VERBATIM, jamais altéré
     return reponses, nouvel_offset
