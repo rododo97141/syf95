@@ -11,21 +11,50 @@ qu'il surveille pourrait être corrompu par elle).
 
 Usage : python3 nexus_98.py
 """
-import json, urllib.request, itertools, re, glob, os
+import json, urllib.request, itertools, re, glob, os, sys
+
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+if SCRIPT_DIR not in sys.path:
+    sys.path.insert(0, SCRIPT_DIR)
+import nexus_sense   # source UNIQUE de lecture des capteurs (respecte CAPTEURS_ROOT)
+import nexus_vie     # juge de vie des sources : remplacée par une leçon, ou éteinte
+                     # par l'horloge d'activité. 98 n'invente plus sa propre récence.
 
 BASE = "http://127.0.0.1:8077"
-ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "memoire_data")
-CAPTEURS = os.path.join(ROOT, "capteurs", "journal.jsonl")
+ROOT = os.path.join(SCRIPT_DIR, "memoire_data")
 
-def lire_capteurs():
-    ev = []
-    if os.path.exists(CAPTEURS):
-        for l in open(CAPTEURS, encoding="utf-8"):
-            l = l.strip()
-            if l:
-                try: ev.append(json.loads(l))
-                except Exception: pass
-    return ev
+
+def _runs_propres(cap):
+    """Horloge d'ACTIVITÉ (pas de calendrier) : pour chaque événement i, combien
+    d'événements capteur de statut 'ok' se sont écoulés DEPUIS lui (strictement
+    après). C'est la récence « en nombre de runs propres » qu'attend nexus_vie."""
+    n = len(cap)
+    out = [0] * n
+    ok_apres = 0
+    for i in range(n - 1, -1, -1):
+        out[i] = ok_apres
+        if cap[i].get("statut") == "ok":
+            ok_apres += 1
+    return out
+
+
+def plaies_vivantes(cap, liaisons):
+    """Compte les PLAIES (échec / retour négatif / reprise) encore VIVANTES.
+    Une plaie n'est un dommage ACTIF que si nexus_vie.est_vivant la déclare
+    vivante : ni remplacée par une leçon (table de liaison), ni éteinte par
+    l'horloge d'activité (assez de runs 'ok' écoulés depuis). 98 délègue tout
+    le jugement de récence à nexus_vie — plus de bricolage local.
+    Renvoie (echecs, fneg, reprises) : plaies encore vives, par type."""
+    rp = _runs_propres(cap)
+    vivante = lambda i, e: nexus_vie.est_vivant(e, liaisons, rp[i])
+    echecs = sum(1 for i, e in enumerate(cap)
+                 if e.get("statut") == "echec" and vivante(i, e))
+    fneg = sum(1 for i, e in enumerate(cap)
+               if e.get("feedback") == "neg" and vivante(i, e))
+    reprises = sum(1 for i, e in enumerate(cap)
+                   if e.get("qualite") == "reprise" and vivante(i, e))
+    return echecs, fneg, reprises
+
 
 def vrais_en_attente():
     """Compte les candidats en_attente RÉELLEMENT actifs (exclut les tombes promu:true).
@@ -104,18 +133,24 @@ def main():
     if backlog_danger: signaux.append("🟠 backlog en_attente — réconcilier (nexus_reconcile)")
 
     # --- SIGNAUX issus des CAPTEURS (la douleur réelle, ressentie) ---
-    cap = lire_capteurs()
+    # 98 ne compte plus TOUTES les plaies jamais captées : une plaie déjà
+    # réparée (une leçon l'a remplacée) ou refroidie (l'activité a repris sans
+    # qu'elle se reproduise) n'est plus un dommage actif. Le verdict de vie est
+    # DÉLÉGUÉ à nexus_vie.est_vivant — premier consommateur de est_vivant().
+    # LECTURE SEULE : nexus_sense lit les capteurs, nexus_vie lit la table de
+    # liaison ; 98 n'écrit ni l'un ni l'autre.
+    cap = nexus_sense.lire()               # source UNIQUE de lecture des capteurs
     if cap:
-        echecs = sum(1 for e in cap if e.get("statut") == "echec")
-        fneg = sum(1 for e in cap if e.get("feedback") == "neg")
-        reprises = sum(1 for e in cap if e.get("qualite") == "reprise")
-        print(f"   Capteurs : {len(cap)} traces · {echecs} échec(s) · {fneg} retour(s) négatif(s) · {reprises} reprise(s)\n")
+        liaisons = nexus_vie.lire_liaisons()   # table source → leçon, LECTURE SEULE
+        echecs, fneg, reprises = plaies_vivantes(cap, liaisons)
+        print(f"   Capteurs : {len(cap)} traces · {echecs} échec(s) vivant(s) · "
+              f"{fneg} retour(s) négatif(s) vivant(s) · {reprises} reprise(s) vivante(s)\n")
         if echecs > 0:
-            signaux.append(f"🔴 {echecs} échec(s) capté(s) — dommage réel, analyser la cause")
+            signaux.append(f"🔴 {echecs} échec(s) encore vivant(s) — dommage réel non résolu, analyser la cause")
         if fneg > 0:
-            signaux.append(f"🟠 {fneg} retour négatif de Kily — douleur ressentie par l'utilisateur")
+            signaux.append(f"🟠 {fneg} retour négatif encore vivant — douleur non résolue de Kily")
         if reprises >= 3:
-            signaux.append("🟠 reprises fréquentes — qualité à surveiller")
+            signaux.append("🟠 reprises fréquentes encore vivantes — qualité à surveiller")
     else:
         print()
 
