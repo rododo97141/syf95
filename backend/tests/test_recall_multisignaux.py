@@ -304,6 +304,52 @@ def test_robustesse_embedder_defaillant_degrade_sans_crash(nf, mem):
 
 
 # --------------------------------------------------------------------------- #
+# 6bis. GARDE-FOU de la LIMITE HONNÊTE : force plate == force inerte
+#   Tant qu'aucun capteur n'alimente de vraies forces (calculer_forces() == {}
+#   sur le corpus réel aujourd'hui), toutes les fiches sont à la force par défaut.
+#   f(force) est alors une CONSTANTE identique pour tous les candidats, donc
+#   beta*f(force) est une constante qui ne DÉPARTAGE rien : le score réel se
+#   réduit à `pert`, la moitié « force vivante » est inerte en PRODUCTION.
+#   Ce test GARDE ce fait (pas juste un commentaire). Il redeviendra pertinent à
+#   re-regarder le jour où de vraies forces distinctes existeront : l'assertion 3
+#   ÉCHOUERA alors si la force finit par départager — signal attendu que la
+#   moitié force vivante est enfin active.
+# --------------------------------------------------------------------------- #
+def test_force_plate_est_inerte_tant_quaucun_capteur_nalimente(nf, mem, tmp_path, monkeypatch):
+    # Reproduit l'état de PRODUCTION actuel de façon déterministe : mémoire et
+    # capteurs isolés et vides → calculer_forces() renvoie bien {} (zéro force).
+    monkeypatch.setenv("MEMOIRE_ROOT", str(tmp_path / "iso_memoire"))
+    assert nf.calculer_forces() == {}          # FAIT : aucun capteur porteur de fiche
+
+    # corpus à pertinences variées (lexical + sémantique), forces TOUTES au défaut.
+    _fiche(mem, "dom", "cat", "a", "reformulation projet budget zorglubide")
+    _fiche(mem, "dom", "cat", "b", "projet budget equipe planning")
+    _fiche(mem, "dom", "cat", "c", "sujet different interrogation xyz")
+    query = "reformuler le projet zorglubide budget"
+    cands = _cands(mem, query)
+
+    # forces={} == calculer_forces() en production → tout le monde à FORCE_DEFAUT.
+    r = nf.rank(query, cands, forces={}, embedder=nf.EmbedderFake())
+
+    # 1) f(force) est une CONSTANTE identique pour tous les candidats.
+    valeurs_ff = {round(it["_f_force"], 12) for it in r}
+    assert len(valeurs_ff) == 1
+    assert valeurs_ff == {round(nf.f_force(nf.FORCE_DEFAUT), 12)}     # == f(1.0) ≈ 0.1667
+
+    # 2) beta*f(force) est donc une constante ajoutée à tous : l'écart de score
+    #    entre deux fiches est EXACTEMENT leur seul écart de pertinence.
+    for x, y in zip(r, r[1:]):
+        assert (x["_score"] - y["_score"]) == pytest.approx(x["_pert"] - y["_pert"])
+
+    # 3) le classement par _score est EXACTEMENT le classement par _pert : la
+    #    force vivante n'a rien départagé (elle est INERTE en production).
+    par_score = [it["file"] for it in r]
+    par_pert = [it["file"] for it in sorted(
+        r, key=lambda z: (-z["_pert"], z.get("path", ""), z.get("file", "")))]
+    assert par_score == par_pert
+
+
+# --------------------------------------------------------------------------- #
 # 7. LECTURE SEULE prouvée par empreintes binaires
 # --------------------------------------------------------------------------- #
 def _empreintes(racine):
