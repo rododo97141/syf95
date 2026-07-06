@@ -58,6 +58,7 @@ if _organes() not in sys.path:
     sys.path.insert(0, _organes())
 import nexus_bus            # noqa: E402
 import nexus_force          # noqa: E402
+import nexus_sense          # noqa: E402
 import nexus_agentos        # noqa: E402
 import nexus_orchestrateur  # noqa: E402
 from nexus_adaptateur import AdaptateurLoopback  # noqa: E402
@@ -425,3 +426,101 @@ def test_observation_journalise_les_trois_issues_dans_fichier_separe():
     chemin_fiab = os.path.join(os.environ["MEMOIRE_ROOT"], "fiabilite_agents.json")
     assert os.path.exists(chemin_fiab)
     assert _empreinte_forces() == empreinte_forces == "<absent>"
+
+
+# --------------------------------------------------------------------------- #
+# LOGGER AUTO-CÂBLÉ : observer() miroite CHAQUE issue vers le capteur JSONL
+# général (nexus_sense) — visible à 96/98 — SANS jamais influencer la force
+# vivante. Deuxième journalisation, en plus de la fiabilité mécanique (INCHANGÉE).
+# --------------------------------------------------------------------------- #
+def _actions_des_trois_issues():
+    """Les trois issues mécaniques, sous forme d'action() à observer :
+    réponse normale, TimeoutError, Exception générique."""
+    def _reponse():
+        return "ok"
+
+    def _timeout():
+        raise TimeoutError()
+
+    def _exception():
+        raise RuntimeError("boum")
+
+    return [("reponse", _reponse), ("timeout", _timeout), ("exception", _exception)]
+
+
+def test_observer_capte_les_trois_issues_sans_toucher_la_fiabilite():
+    """Pour les 3 issues : journaliser_fiabilite est TOUJOURS appelé comme avant
+    (régression interdite) ET un événement capteur est écrit avec statut="ok",
+    mode="auto", fiche=<nom>, tache="observer:<nom>", sans champ note (note=None)."""
+    for issue_attendue, action in _actions_des_trois_issues():
+        issue, _ = nexus_orchestrateur.observer("ag", action)
+        assert issue == issue_attendue
+
+    # (1) Fiabilité mécanique INCHANGÉE : chaque issue journalisée exactement 1×.
+    assert nexus_orchestrateur.lire_fiabilite("ag") == {
+        "reponse": 1, "exception": 1, "timeout": 1}
+
+    # (2) Le capteur général a reçu UN événement par issue (3 au total), tous
+    #     statut="ok" (jamais succes/echec), mode="auto", fiche=l'agent observé.
+    evs = [e for e in nexus_sense.lire() if e.get("tache") == "observer:ag"]
+    assert len(evs) == 3
+    for e in evs:
+        assert e["statut"] == "ok"        # jamais "succes"/"echec" (réservés HITL)
+        assert e["mode"] == "auto"
+        assert e["fiche"] == "ag"         # l'AGENT (comme fiche=expediteur du bus)
+        assert e.get("note") is None      # aucun détail dupliqué depuis la fiabilité
+
+
+def test_observer_capteur_defaillant_ne_casse_pas_la_boucle(monkeypatch):
+    """Si nexus_sense.log_event() lève, observer() ne casse pas et renvoie quand
+    même le résultat normal (issue, valeur) — l'échec du logger ne remonte JAMAIS
+    à l'appelant (même doctrine que nexus_force.appliquer, qui ne lève jamais)."""
+    def _log_qui_explose(*a, **k):
+        raise RuntimeError("capteur en panne")
+
+    monkeypatch.setattr(nexus_sense, "log_event", _log_qui_explose)
+
+    # Les 3 issues restent observées normalement malgré le logger défaillant.
+    issue, val = nexus_orchestrateur.observer("ag", lambda: "resultat")
+    assert issue == "reponse" and val == "resultat"
+
+    def _timeout():
+        raise TimeoutError()
+    issue, exc = nexus_orchestrateur.observer("ag", _timeout)
+    assert issue == "timeout" and isinstance(exc, TimeoutError)
+
+    def _boom():
+        raise RuntimeError("boum")
+    issue, exc = nexus_orchestrateur.observer("ag", _boom)
+    assert issue == "exception" and isinstance(exc, RuntimeError)
+
+    # Et la fiabilité mécanique, elle, a bien été journalisée (logger ≠ fiabilité).
+    assert nexus_orchestrateur.lire_fiabilite("ag") == {
+        "reponse": 1, "exception": 1, "timeout": 1}
+
+
+def test_observer_ok_laisse_calculer_forces_inerte():
+    """Extension du garde-fou « force plate == force inerte » aux événements
+    observer() : un lot d'observations (statut="ok" uniquement) ne fait bouger
+    AUCUNE force — aucune fiche/agent n'obtient une force ≠ FORCE_DEFAUT. La
+    frontière capteur→force tient parce que calculer_forces() n'agrège QUE
+    succes/echec, jamais "ok"."""
+    # Pas de forces.json préexistant : l'état de production reproduit ici.
+    assert nexus_force.calculer_forces() == {}
+
+    # Un vrai lot d'observations réelles, sur plusieurs agents, les 3 issues.
+    for nom in ("alpha", "beta", "gamma"):
+        for _issue, action in _actions_des_trois_issues():
+            nexus_orchestrateur.observer(nom, action)
+
+    # Le capteur a bien enregistré ces événements (le lot n'est pas vide)...
+    captes = [e for e in nexus_sense.lire() if e["tache"].startswith("observer:")]
+    assert len(captes) == 9
+    assert {e["statut"] for e in captes} == {"ok"}  # UNIQUEMENT "ok"
+
+    # ... et pourtant calculer_forces() reste INERTE : aucune force distincte du
+    # défaut n'apparaît (ni pour les agents observés, ni pour personne).
+    forces = nexus_force.calculer_forces()
+    assert all(v == nexus_force.FORCE_DEFAUT for v in forces.values())
+    for nom in ("alpha", "beta", "gamma"):
+        assert nexus_orchestrateur._force_de(forces, nom) == nexus_force.FORCE_DEFAUT
