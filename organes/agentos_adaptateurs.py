@@ -73,13 +73,19 @@ class AdaptateurReel(NexusAdapter):
     prouver « l'agent reçoit », comme en brique 1).
     """
 
-    def __init__(self, nom):
+    def __init__(self, nom, roles=None):
         self._nom = nom
+        self._roles = list(roles) if roles else []  # défaut [] : rétrocompat
         self._offset = 0  # position de lecture propre au mode BRANCHÉ
         self.recus = []
 
     def nom(self):
         return self._nom
+
+    def roles(self):
+        """Capacités déclarées (brique 4). Défaut [] : ajout pur — un agent réel
+        qui ne déclare rien reste routable en nommé/étoile, invisible au rôle."""
+        return list(self._roles)
 
     def _repondre(self, msg):
         """Produit le CONTENU de la réponse à une demande, ou None
@@ -171,8 +177,8 @@ class AdaptateurMemoire(AdaptateurReel):
     Sans clé, sans réseau : un agent réel peut l'être localement.
     """
 
-    def __init__(self, nom, scope="all"):
-        super().__init__(nom)
+    def __init__(self, nom, scope="all", roles=("memoire",)):
+        super().__init__(nom, roles=roles)  # déclare le rôle "memoire" par défaut
         self._scope = scope  # all | structure | en_attente | brut
 
     def _repondre(self, msg):

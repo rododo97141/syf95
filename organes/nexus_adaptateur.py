@@ -37,6 +37,12 @@ class NexusAdapter:
       - nom()            → str : identité de l'agent sur le bus ;
       - sur_message(msg) → msg | None : traite UN message (schéma
         nexus_bus), renvoie un message de réponse ou None (silence).
+
+    roles() est un AJOUT PUR (brique 4) : la liste des capacités que l'agent
+    déclare servir (ex. ["memoire", "resume"]). Défaut = liste vide —
+    RÉTROCOMPATIBLE : un adaptateur écrit avant la brique 4 ne déclare aucun
+    rôle et reste invisible au routage par rôle (destinataire "role:<capacité>"),
+    sans que rien de son comportement nommé/étoile ne change.
     """
 
     def nom(self):
@@ -44,6 +50,11 @@ class NexusAdapter:
 
     def sur_message(self, msg):
         raise NotImplementedError("un adaptateur doit fournir sur_message(msg)")
+
+    def roles(self):
+        """Capacités déclarées par l'agent, pour le routage par force vivante
+        (brique 4). Défaut : aucune — ajout pur, rétrocompatible."""
+        return []
 
 
 class AdaptateurLoopback(NexusAdapter):
@@ -64,14 +75,20 @@ class AdaptateurLoopback(NexusAdapter):
     aux tests de prouver « A reçoit » et « le broadcast atteint tous »).
     """
 
-    def __init__(self, nom, regles):
+    def __init__(self, nom, regles, roles=None):
         self._nom = nom
         self._regles = dict(regles)
+        self._roles = list(roles) if roles else []  # défaut [] : rétrocompat
         self._offset = 0  # position de lecture propre au mode BRANCHÉ
         self.recus = []
 
     def nom(self):
         return self._nom
+
+    def roles(self):
+        """Rôles déclarés par ce mock (défaut [] : rétrocompatible). Permet aux
+        tests de la brique 4 de fabriquer des agents fictifs d'un même rôle."""
+        return list(self._roles)
 
     def sur_message(self, msg):
         """Mode SOLO : traite UN message sans bus, renvoie msg | None."""
