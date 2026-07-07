@@ -1,0 +1,39 @@
+{
+  "ok": true,
+  "scope": "all",
+  "count": 4,
+  "results": [
+    {
+      "etage": "brut",
+      "domain": null,
+      "category": null,
+      "file": "2026-01-01.md",
+      "path": "brut/2026-01-01.md",
+      "excerpt": "# Notes brutes\nnote rapide budget zorglubide capturee vite\n"
+    },
+    {
+      "etage": "structure",
+      "domain": "travail",
+      "category": "methodes",
+      "file": "struct-forte.md",
+      "path": "structure/travail/methodes/struct-forte.md",
+      "excerpt": "# fiche forte\nprojet zorglubide budget equipe planning\n"
+    },
+    {
+      "etage": "en_attente",
+      "domain": null,
+      "category": null,
+      "file": "20260101-000000-candidat-non-promu.md",
+      "path": "en_attente/20260101-000000-candidat-non-promu.md",
+      "excerpt": "# (en attente) candidat\nanalyse zorglubide en attente de validation\n"
+    },
+    {
+      "etage": "structure",
+      "domain": "travail",
+      "category": "methodes",
+      "file": "struct-faible.md",
+      "path": "structure/travail/methodes/struct-faible.md",
+      "excerpt": "# fiche faible\nprojet budget divers rangement\n"
+    }
+  ]
+}
