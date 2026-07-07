@@ -24,6 +24,7 @@ import ast
 import glob
 import json
 import os
+import secrets
 import sys
 
 import pytest
@@ -70,6 +71,22 @@ class MemoireInterdite:
         raise AssertionError("stage() ne doit pas être appelée ici")
 
 
+def _brouillon_incertain_direct(contenu="note captée hors adresse"):
+    """Construit un Brouillon certain=False SANS passer par preparer_ecriture.
+
+    Depuis le correctif « déclencheur pur », preparer_ecriture ne produit plus
+    jamais d'incertain (il renvoie None sans trigger). Le marquage
+    certain/incertain et la logique silence≠accord de traiter_relecture restent
+    dans le code comme FILET AVAL (défense en profondeur, au cas où un Brouillon
+    incertain existerait par un autre chemin) : on le teste donc en fabriquant
+    directement l'objet, puisque le chemin normal ne le fournit plus."""
+    jeton = secrets.token_urlsafe(16)
+    b = friday_ecrivain.Brouillon("note", contenu, "friday", "notes",
+                                  contenu[:60], False, jeton)
+    friday_ecrivain._REGISTRE[jeton] = b
+    return b
+
+
 def _journal_capteurs():
     chemin = os.path.join(os.environ["CAPTEURS_ROOT"], "capteurs", "journal.jsonl")
     if not os.path.exists(chemin):
@@ -90,13 +107,30 @@ def test_preparer_ne_touche_pas_le_disque(tmp_path, monkeypatch):
     monkeypatch.setattr(builtins, "open", _open_interdit)
 
     b1 = friday_ecrivain.preparer_ecriture("note acheter du pain", trigger_present=True)
-    b2 = friday_ecrivain.preparer_ecriture("tache rappeler le médecin", trigger_present=False)
+    b2 = friday_ecrivain.preparer_ecriture("tache rappeler le médecin", trigger_present=True)
 
     assert b1 is not None and b2 is not None
-    assert b1.certain is True and b2.certain is False       # trigger → certain
+    assert b1.certain is True and b2.certain is True        # trigger → certain
     assert b1.jeton and b2.jeton and b1.jeton != b2.jeton   # jetons uniques
+    # Sans déclencheur : aucun brouillon (déclencheur pur), toujours sans disque.
+    assert friday_ecrivain.preparer_ecriture("note sans trigger", trigger_present=False) is None
     # Aucun fichier créé nulle part sous MEMOIRE_ROOT.
     assert not (tmp_path / "mem").exists()
+
+
+def test_preparer_sans_declencheur_retourne_none():
+    """RÉGRESSION (déclencheur pur) : sans trigger, preparer_ecriture ne produit
+    AUCUN brouillon — exactement comme un texte hors vocabulaire. Le marquage
+    incertain n'est donc plus jamais atteint via preparer en fonctionnement
+    normal. Test ISOLÉ sur preparer (surtout pas de bout en bout : sinon le
+    filet aval traiter_relecture masquerait la régression)."""
+    assert friday_ecrivain.preparer_ecriture(
+        "note acheter du pain", trigger_present=False) is None
+    assert friday_ecrivain.preparer_ecriture(
+        "tache rappeler le médecin", trigger_present=False) is None
+    # Avec déclencheur, un brouillon certain=True est bien produit.
+    b = friday_ecrivain.preparer_ecriture("note acheter du pain", trigger_present=True)
+    assert b is not None and b.certain is True
 
 
 def test_preparer_refuse_ce_qui_n_est_pas_une_ecriture():
@@ -214,16 +248,17 @@ def test_certain_true_silence_confirme(monkeypatch):
 
 
 def test_certain_false_silence_ne_confirme_pas(monkeypatch):
-    b = friday_ecrivain.preparer_ecriture("note ambiguë", trigger_present=False)
+    b = _brouillon_incertain_direct()                     # FILET AVAL (preparer n'en produit plus)
     appels = _espion_confirmer(monkeypatch)
 
     friday_ecrivain.traiter_relecture(b, reponse_orale="", silence=True)
 
-    assert appels == []                                   # sans trigger, silence ≠ accord
+    assert b.certain is False
+    assert appels == []                                   # incertain + silence ≠ accord
 
 
 def test_certain_false_oui_explicite_confirme(monkeypatch):
-    b = friday_ecrivain.preparer_ecriture("note à confirmer", trigger_present=False)
+    b = _brouillon_incertain_direct()                     # FILET AVAL
     appels = _espion_confirmer(monkeypatch)
 
     friday_ecrivain.traiter_relecture(b, reponse_orale="Oui !", silence=False)
@@ -233,8 +268,9 @@ def test_certain_false_oui_explicite_confirme(monkeypatch):
 
 def test_refus_oral_annule_dans_les_deux_cas(monkeypatch):
     appels = _espion_confirmer(monkeypatch)
-    for trig in (True, False):
-        b = friday_ecrivain.preparer_ecriture("note à refuser", trigger_present=trig)
+    certain = friday_ecrivain.preparer_ecriture("note à refuser", trigger_present=True)
+    incertain = _brouillon_incertain_direct("note à refuser")   # FILET AVAL
+    for b in (certain, incertain):
         friday_ecrivain.traiter_relecture(b, reponse_orale="non", silence=True)
     assert appels == []                                   # un "non" explicite ne confirme jamais
 

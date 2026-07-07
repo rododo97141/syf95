@@ -94,11 +94,22 @@ _DESTINATIONS = {
 
 def preparer_ecriture(texte, trigger_present):
     """texte transcrit + `trigger_present` (bool, fourni par le POSTE) → un
-    Brouillon, ou None si ce n'est pas une commande d'écriture reconnue.
+    Brouillon, ou None.
 
-    PUR : ne touche RIEN sur le disque (prouvé par test). N'appelle jamais
-    stage(). Marque `certain = bool(trigger_present)`. Génère un jeton d'usage
-    unique non forgeable (secrets) et l'enregistre en mémoire du process."""
+    DÉCLENCHEUR PUR : sans trigger vocal explicite, preparer_ecriture ne produit
+    AUCUN brouillon (retourne None) — exactement comme un texte hors
+    vocabulaire. Une phrase note/tâche captée sans mot d'éveil ne s'adresse
+    pas forcément à Friday : on ne fabrique donc pas un brouillon « incertain »
+    à rattraper en aval, on ne fabrique rien. (Le marquage certain/incertain et
+    la logique silence≠accord de traiter_relecture restent néanmoins en place
+    comme défense en profondeur, au cas où un Brouillon incertain viendrait d'un
+    autre chemin — mais ce chemin-ci ne les alimente plus.)
+
+    PUR aussi au sens disque : ne touche RIEN sur le disque (prouvé par test).
+    N'appelle jamais stage(). Génère un jeton d'usage unique non forgeable
+    (secrets) et l'enregistre en mémoire du process."""
+    if not trigger_present:
+        return None                            # déclencheur pur : pas de trigger → aucun brouillon
     resultat = friday_routeur.router(texte)
     intention, argument = resultat["intention"], resultat["argument"]
     if intention not in _DESTINATIONS or not argument:
@@ -110,7 +121,7 @@ def preparer_ecriture(texte, trigger_present):
     title = contenu[:60].strip() or ("note vocale" if intention == "note" else "tâche vocale")
     jeton = secrets.token_urlsafe(32)          # non forgeable, à usage unique
     brouillon = Brouillon(intention, contenu, domain, category, title,
-                          bool(trigger_present), jeton)
+                          bool(trigger_present), jeton)  # certain=True (trigger présent)
     _REGISTRE[jeton] = brouillon               # registre EN MÉMOIRE, pas sur disque
     return brouillon
 
