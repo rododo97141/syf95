@@ -27,18 +27,31 @@ if SCRIPT_DIR not in sys.path:
     sys.path.insert(0, SCRIPT_DIR)
 import friday_routeur
 import friday_lecteur
+import friday_ecrivain  # brique 2+ : chemin d'ÉCRITURE (note/tache), hors lecture
 import nexus_sense  # côté ÉCRITURE de la force vivante — jamais importé par le lecteur
 
 
-def traiter_ligne(texte, racine=None):
+def traiter_ligne(texte, racine=None, trigger_present=False):
     """LA frontière texte→texte : ligne transcrite → réponse à lire, ou None.
     racine (optionnelle) pointe le lecteur sur un autre dépôt — les tests
-    s'isolent ainsi, même doctrine que CAPTEURS_ROOT."""
+    s'isolent ainsi, même doctrine que CAPTEURS_ROOT.
+
+    `trigger_present` (bool, fourni par le POSTE — mot d'éveil détecté côté
+    matériel) n'a d'effet que sur le chemin d'ÉCRITURE de la brique 2+."""
     resultat = friday_routeur.router(texte)
     intention, argument = resultat["intention"], resultat["argument"]
     if intention == friday_routeur.REFUS:
         nexus_sense.log_event(tache="friday:refus", statut="refus", mode="auto")
         return None
+    if intention in ("note", "tache"):
+        # Branchement brique 2+ : une commande d'écriture est dirigée HORS du
+        # chemin de lecture. Le cœur, stateless, ne fait qu'ACCUSER RÉCEPTION
+        # (aperçu parlé, lecture seule) ; il n'écrit rien. Le cycle complet
+        # préparer → relecture obligatoire → confirmer/annuler est piloté par le
+        # poste via friday_ecrivain (seul détenteur de la porte stage()).
+        nexus_sense.log_event(tache=f"friday:{intention}", statut="ok", mode="auto",
+                              note=argument)
+        return friday_ecrivain.apercu(texte)
     if intention == "statut":
         reponse = friday_lecteur.statut(racine=racine)
     elif intention == "montre":

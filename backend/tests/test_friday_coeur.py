@@ -84,7 +84,7 @@ def test_frontiere_texte_texte_aucune_dependance_audio():
     """La frontière est texte→texte : les modules Friday n'importent que la
     bibliothèque standard non audio et les organes du dépôt."""
     autorises = {"os", "sys", "ast", "unicodedata",
-                 "friday_routeur", "friday_lecteur", "nexus_sense"}
+                 "friday_routeur", "friday_lecteur", "friday_ecrivain", "nexus_sense"}
     for module in (friday_coeur, friday_routeur, friday_lecteur):
         with open(module.__file__, encoding="utf-8") as f:
             arbre = ast.parse(f.read())

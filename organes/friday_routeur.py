@@ -17,12 +17,19 @@ Sortie  : {"intention": ..., "argument": ...}
 """
 import unicodedata
 
-INTENTIONS = ("montre", "ou_est", "explique", "statut")
+INTENTIONS = ("montre", "ou_est", "explique", "statut", "note", "tache")
 REFUS = "refus"
 
 # --- VOCABULAIRE FERMÉ --------------------------------------------------
 # Commandes À ARGUMENT : la ligne normalisée doit COMMENCER par le préfixe,
 # suivi d'un argument non vide (« montre » tout seul = refus).
+#
+# Brique 2+ (écriture mémoire vocale) : POINT DE BRANCHEMENT. Les préfixes
+# d'ÉCRITURE « note » / « tache » sont déclarés ICI, à côté des commandes de
+# lecture — le vocabulaire reste fermé (la table EST la règle). Le routeur ne
+# fait que RECONNAÎTRE l'intention ; l'écriture réelle (préparation, relecture
+# obligatoire, staging) vit dans friday_ecrivain et ne se déclenche jamais
+# depuis ce simple routage. « note » / « tache » seuls (sans argument) = refus.
 PREFIXES = {
     "montre moi": "montre",
     "montre": "montre",
@@ -31,6 +38,13 @@ PREFIXES = {
     "ou se trouve": "ou_est",
     "explique moi": "explique",
     "explique": "explique",
+    "prends note": "note",
+    "note que": "note",
+    "note": "note",
+    "nouvelle tache": "tache",
+    "ajoute une tache": "tache",
+    "rappelle moi de": "tache",
+    "tache": "tache",
 }
 # Commandes SANS argument : la ligne normalisée doit être EXACTEMENT le mot
 # (« le statut de la réunion » ne déclenche rien).
