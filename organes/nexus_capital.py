@@ -1,0 +1,492 @@
+#!/usr/bin/env python3
+"""
+NEXUS — Capital de critères (la brique HITL capitalisante)
+« Ce que Kily tranche une fois doit servir mille fois — et peser selon ce qu'il rend. »
+
+Quand une tâche subjective bute sur « quels critères / quels tests appliquer ? »,
+Kily répond. Cet organe CAPITALISE cette réponse pour qu'elle :
+  (a) devienne une FICHE retrouvable par le classement pertinence(IDF) × force
+      de rank() (nexus_force / memory_api : PR 57) ;
+  (b) alimente enfin calculer_forces() — jusqu'ici {} car le logger auto n'émet
+      que `statut="ok"`, un statut que calculer_forces NE COMPTE PAS. Ici, le
+      geste de clôture émet un capteur `statut=succes|echec` (les DEUX seuls
+      statuts que calculer_forces compte : +1 / -1), fiche=<slug> : la force
+      d'une fiche monte quand elle sert et réussit, descend quand elle rate.
+
+Le chantier CÂBLE des organes existants, il ne les reconstruit pas :
+  - nexus_lecons  : journal + transfert (pointeur de leçon, RÉFÉRENCE jamais copie)
+  - nexus_sense   : log_event(fiche=<slug>, statut=succes|echec) — le capteur
+  - nexus_force   : calculer_forces + rank + bornes FORCE_MIN 0.2 / FORCE_MAX 5.0
+
+nexus_capital est le SEUL écrivain de SES fichiers :
+  - fiches      : <MEMOIRE_ROOT>/structure/<domaine>/criteres-kily/<slug>.md
+  - journal     : <MEMOIRE_ROOT>/capital/consultations.jsonl (append-only)
+Il n'écrit JAMAIS memory_api.py, nexus_force.py, nexus_sense.py, nexus_lecons.py :
+  les capteurs et le journal des leçons sont écrits VIA ces organes (un écrivain
+  par fichier). L'emplacement des fiches est celui que rank()/memory_api lisent
+  RÉELLEMENT par défaut (MEMOIRE_ROOT/structure) — décision vérifiée, cf. la PR :
+  `memoire/` à la racine (committé) n'est lu par aucun code runtime.
+
+Les cinq gestes :
+  1) capitaliser(question, reponse, contexte, domaine)  -> écrit la fiche + pointeur leçon
+  2) consulter(query, tache)                            -> délègue à rank(), journalise
+  3) appliquer(consultation_id, fiche_retenue, resultat, tache) -> clôture + capteur de force
+  4) clore_sans_dette(consultation_id, raison)          -> clôture SANS capteur de force
+  5) bilan()                                            -> dette de consultations non closes
+
+Usage bibliothèque uniquement (pas de CLI serveur ici).
+"""
+import os
+import re
+import sys
+import json
+import datetime
+import unicodedata
+
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+if SCRIPT_DIR not in sys.path:
+    sys.path.insert(0, SCRIPT_DIR)
+
+import nexus_force    # source UNIQUE du chemin mémoire + rank/calculer_forces (LU)
+import nexus_sense    # capteur : log_event(fiche=<slug>, statut=succes|echec)
+import nexus_lecons   # journal de leçons + transfert (pointeur, RÉFÉRENCE)
+
+# --------------------------------------------------------------------------- #
+# Catégorie fixe des fiches capitalisées : le 2e niveau sous structure/<domaine>/.
+# _scan (memory_api) en dérive `category` = parts[2] → filtrable par recall().
+# --------------------------------------------------------------------------- #
+CATEGORIE = "criteres-kily"
+
+# --------------------------------------------------------------------------- #
+# N_JOURS_DETTE — fenêtre au-delà de laquelle une consultation fiche-unique NI
+# appliquée NI close-sans-dette bascule en DETTE. PROVISOIRE, même discipline
+# que PR 57 : ce n'est pas une valeur mesurée, c'est un point de départ.
+#   • Mesure de qualité : délai médian observé consultation -> application (P50)
+#     et P90, sur le journal consultations.jsonl.
+#   • Déclencheur chiffré de révision : dès ≥ 30 consultations fiche-unique
+#     clôturées, recalculer P50/P90. Si P90 < 2 j → abaisser N à 3 ; si P50 > 5 j
+#     → relever N à 14 (sinon la dette « crie » sur un rythme de travail normal).
+# --------------------------------------------------------------------------- #
+N_JOURS_DETTE = 7  # PROVISOIRE
+
+
+# =========================================================================== #
+# Chemins — ADOSSÉS à nexus_force._racine_memoire() : une SEULE source de vérité
+# pour la racine mémoire (respecte MEMOIRE_ROOT, relu à chaque appel). Garantit
+# que les fiches atterrissent là où rank()/memory_api lisent.
+# =========================================================================== #
+def _racine():
+    return nexus_force._racine_memoire()
+
+
+def _dir_structure():
+    return os.path.join(_racine(), "structure")
+
+
+def _dir_fiches(domaine):
+    return os.path.join(_dir_structure(), _slug(domaine), CATEGORIE)
+
+
+def _chemin_fiche(domaine, slug):
+    return os.path.join(_dir_fiches(domaine), slug + ".md")
+
+
+def _chemin_consultations():
+    return os.path.join(_racine(), "capital", "consultations.jsonl")
+
+
+# =========================================================================== #
+# Slug — RÉPLIQUE EXACTE de memory_api.slugify : même nom de fichier que le
+# corpus réel, donc dédup naturelle (un slug = un fichier).
+# =========================================================================== #
+def _slug(text):
+    text = unicodedata.normalize("NFKD", str(text)).encode("ascii", "ignore").decode("ascii")
+    text = text.strip().lower()
+    text = re.sub(r"[^a-z0-9\s-]", "", text)
+    text = re.sub(r"[\s_]+", "-", text)
+    text = re.sub(r"-+", "-", text).strip("-")
+    return text or "sans-titre"
+
+
+def _today():
+    return datetime.date.today().strftime("%d/%m/%Y")
+
+
+def _now():
+    return datetime.datetime.now().isoformat(timespec="seconds")
+
+
+# =========================================================================== #
+# 1) capitaliser — écrit LA fiche (source unique) + un pointeur de leçon
+#    (RÉFÉRENCE : le slug, JAMAIS une copie de la réponse verbatim).
+# =========================================================================== #
+def capitaliser(question, reponse, contexte, domaine, pourquoi=None):
+    """Écrit une fiche criteres-kily au format du corpus réel et un pointeur de
+    leçon (référence au slug, aucune copie de contenu).
+
+    - contexte est OBLIGATOIRE (sans lui, la fiche est un critère hors-sol,
+      inapplicable : on lève plutôt que d'écrire une fiche muette).
+    - `pourquoi` (cause) est OPTIONNEL : ajouté à la fiche et porté par le
+      pointeur de leçon quand il est fourni.
+    - slug dérivé UNE seule fois (de la question), réutilisé pour le fichier, le
+      pointeur de leçon ET la valeur de retour. Recapitaliser le même intitulé
+      met à jour LE même fichier (pas de doublon) et préserve la date de création.
+
+    Renvoie le slug (identité stable de la fiche)."""
+    if not (contexte or "").strip():
+        raise ValueError("capitaliser: 'contexte' est OBLIGATOIRE (un critère sans "
+                         "contexte est inapplicable).")
+    question = (question or "").strip()
+    reponse = (reponse or "").strip()
+    contexte = contexte.strip()
+    pourquoi = (pourquoi or "").strip() or None
+    if not question:
+        raise ValueError("capitaliser: 'question' est requise.")
+    if not reponse:
+        raise ValueError("capitaliser: 'reponse' est requise (verbatim de Kily).")
+
+    slug = _slug(question)                         # dérivé UNE fois
+    chemin = _chemin_fiche(domaine, slug)
+    os.makedirs(os.path.dirname(chemin), exist_ok=True)
+
+    cree_le = _today()
+    if os.path.exists(chemin):                     # recapitalisation : garder la date d'origine
+        try:
+            ancien = open(chemin, encoding="utf-8").read()
+            m = re.search(r"Créé le ([^\s·]+)", ancien)
+            if m:
+                cree_le = m.group(1)
+        except OSError:
+            pass
+
+    dom = _slug(domaine)
+    corps = [
+        "# %s — domaine: %s / catégorie: %s\n" % (question, dom, CATEGORIE),
+        "> Créé le %s · Dernière mise à jour le %s\n\n" % (cree_le, _today()),
+        "## En bref\n%s\n\n" % contexte,
+        "## Détail\n",
+        "### Question\n%s\n\n" % question,
+        "### Réponse (verbatim)\n%s\n\n" % reponse,       # verbatim, source unique
+        "### Contexte\n%s\n" % contexte,
+    ]
+    if pourquoi:
+        corps.append("\n### Pourquoi\n%s\n" % pourquoi)
+    with open(chemin, "w", encoding="utf-8") as f:
+        f.write("".join(corps))
+
+    # Pointeur de leçon : une RÉFÉRENCE au slug, PAS la réponse. Éditer la fiche
+    # ne crée aucune copie divergente (la leçon ne stocke jamais le verbatim).
+    ns = _Namespace(
+        type="methode",
+        contexte="%s / %s" % (dom, CATEGORIE),
+        lecon="critère capitalisé → fiche %s/%s/%s (recall par rank)" % (dom, CATEGORIE, slug),
+        correctif=None,
+        pourquoi=pourquoi,
+    )
+    nexus_lecons.add(ns)
+    return slug
+
+
+# =========================================================================== #
+# 2) consulter — délègue le CLASSEMENT à nexus_force.rank() (aucune logique de
+#    tri nouvelle ici), journalise la consultation (fiche_retenue=null provisoire).
+# =========================================================================== #
+def consulter(query, tache, k=3):
+    """Cherche les critères capitalisés pertinents pour `query` et journalise la
+    consultation. Le tri est INTÉGRALEMENT délégué à nexus_force.rank() — cet
+    organe ne calcule aucun score. Renvoie l'enregistrement de consultation
+    (dont `id` et `slugs_retournes`).
+
+    `slugs_retournes` = slugs (radicaux .md) des candidats à pertinence non nulle,
+    plafonnés aux `k` premiers. Une consultation fiche-UNIQUE (len==1) est la
+    seule qui pourra émettre un capteur de force (cf. appliquer)."""
+    query = query or ""
+    cands = _candidats()                                  # collecte I/O, PAS du tri
+    forces = nexus_force.calculer_forces()                # forces vivantes courantes
+    ranked = nexus_force.rank(query, cands, forces=forces)   # DÉLÉGATION pure
+    retenus = [_slug_de(c) for c in ranked if c.get("_relevance", 0.0) > 0.0][:k]
+
+    cid = _prochain_id()
+    rec = {
+        "type": "consultation",
+        "id": cid,
+        "ts": _now(),
+        "requete": query,
+        "slugs_retournes": retenus,
+        "fiche_retenue": None,        # PROVISOIRE — figé par appliquer()
+        "tache": tache,
+    }
+    _append_consultation(rec)
+    return rec
+
+
+# =========================================================================== #
+# 3) appliquer — geste de clôture d'une consultation fiche-UNIQUE : fige la fiche
+#    retenue, émet UN capteur de force (statut succes|echec) + un transfert.
+#    REFUSE d'émettre un capteur de force si la consultation était multi-fiches.
+# =========================================================================== #
+def appliquer(consultation_id, fiche_retenue, resultat, tache):
+    """Clôt une consultation en constatant qu'UNE fiche a servi et a réussi/échoué.
+
+    Garde-fous :
+      - la consultation doit exister et avoir retourné EXACTEMENT une fiche
+        (« une fiche constatée ») ; sinon REFUS (multi-fiches → clore_sans_dette).
+      - `fiche_retenue` doit être cette unique fiche constatée.
+      - `resultat` doit se réduire à succes|echec — les SEULS statuts que
+        nexus_force.calculer_forces compte (+1 / -1). « ok » / « partiel » sont
+        rejetés ici : les émettre laisserait la force PLATE (le bug historique).
+
+    Émet le capteur via nexus_sense.log_event(fiche=<slug>, statut=...), journalise
+    le transfert via nexus_lecons.appliquer, et fige la clôture dans le journal."""
+    cons = _consultation(consultation_id)
+    if cons is None:
+        raise ValueError("appliquer: consultation inconnue: %r" % consultation_id)
+    slugs = cons.get("slugs_retournes") or []
+    if len(slugs) != 1:
+        raise ValueError(
+            "appliquer: REFUS d'émettre un capteur de force — la consultation %r "
+            "a retourné %d fiche(s) (attendu 1). Multi-fiches ⇒ clore_sans_dette."
+            % (consultation_id, len(slugs)))
+    if fiche_retenue != slugs[0]:
+        raise ValueError(
+            "appliquer: fiche_retenue %r ≠ la fiche constatée %r de la consultation."
+            % (fiche_retenue, slugs[0]))
+
+    statut = _statut_force(resultat)   # succes|echec, ou lève
+
+    # (b) le capteur : fiche=<slug>, statut compté par calculer_forces. C'est CE
+    #     geste qui rend enfin la force vivante (fin du {} permanent).
+    nexus_sense.log_event(
+        tache=tache,
+        statut=statut,
+        mode="assiste",
+        fiche=fiche_retenue,
+        note="capital: application d'un critère capitalisé",
+    )
+
+    # transfert : la leçon (référence au slug) réappliquée à une tâche nouvelle.
+    ns = _Namespace(
+        lecon_cle=fiche_retenue,
+        tache=tache,
+        resultat="mieux" if statut == "succes" else "pire",
+    )
+    nexus_lecons.appliquer(ns)
+
+    rec = {
+        "type": "application",
+        "id": consultation_id,
+        "ts": _now(),
+        "fiche_retenue": fiche_retenue,   # figé
+        "resultat": resultat,
+        "statut": statut,
+        "tache": tache,
+        "capteur_force": True,
+    }
+    _append_consultation(rec)
+    return rec
+
+
+# =========================================================================== #
+# 4) clore_sans_dette — clôture SANS capteur de force (multi-fiches ou
+#    sans-critère) : sort la consultation du dénominateur du backlog.
+# =========================================================================== #
+def clore_sans_dette(consultation_id, raison):
+    """Clôt une consultation sans émettre de capteur de force. Usage : la
+    consultation était multi-fiches (outcome non attribuable à UNE fiche) ou
+    « sans-critère » (la fiche retenue n'était finalement pas un critère). La
+    consultation sort du dénominateur du backlog (ni dette, ni à traiter)."""
+    if not (raison or "").strip():
+        raise ValueError("clore_sans_dette: 'raison' est requise (traçabilité).")
+    rec = {
+        "type": "cloture_sans_dette",
+        "id": consultation_id,
+        "ts": _now(),
+        "raison": raison.strip(),
+    }
+    _append_consultation(rec)
+    return rec
+
+
+# =========================================================================== #
+# 5) bilan — dette = consultations fiche-UNIQUE NI appliquées NI closes-sans-dette
+#    au-delà de N_JOURS_DETTE. Les multi-fiches ne sont JAMAIS dans la dette.
+# =========================================================================== #
+def bilan(now=None, n_jours=None):
+    """Renvoie l'état du backlog HITL. Lecture seule, robuste (journal absent ou
+    lignes corrompues → ignorées).
+
+    - `now` : instant de référence (datetime ou ISO str) ; défaut = maintenant.
+      Injectable pour tester le franchissement de N jours de façon déterministe.
+    - `n_jours` : fenêtre de dette ; défaut = N_JOURS_DETTE.
+
+    Dénominateur du backlog = consultations fiche-UNIQUE (len(slugs)==1). Une
+    telle consultation est CLOSE si elle a une application OU une clôture-sans-dette.
+    Dette = fiche-unique, non close, âge > n_jours. Multi-fiches : hors backlog."""
+    if n_jours is None:
+        n_jours = N_JOURS_DETTE
+    ref = _to_dt(now) if now is not None else datetime.datetime.now()
+
+    consultations = {}     # id -> record d'ouverture
+    closes = set()         # ids appliqués ou clos-sans-dette
+    for rec in _lire_consultations():
+        t = rec.get("type")
+        cid = rec.get("id")
+        if cid is None:
+            continue
+        if t == "consultation":
+            consultations[cid] = rec
+        elif t in ("application", "cloture_sans_dette"):
+            closes.add(cid)
+
+    dette, ouvertes, n_closes, n_multi = [], [], 0, 0
+    for cid, rec in consultations.items():
+        slugs = rec.get("slugs_retournes") or []
+        if len(slugs) != 1:
+            n_multi += 1               # multi-fiches (ou zéro) : hors backlog
+            continue
+        if cid in closes:
+            n_closes += 1              # appliquée ou close-sans-dette : hors dette
+            continue
+        age = _age_jours(rec.get("ts"), ref)
+        if age is not None and age > n_jours:
+            dette.append({"id": cid, "ts": rec.get("ts"), "slug": slugs[0],
+                          "requete": rec.get("requete"), "tache": rec.get("tache"),
+                          "age_jours": round(age, 2)})
+        else:
+            ouvertes.append(cid)       # dans le dénominateur, pas encore en retard
+
+    n_actionnables = len(dette) + len(ouvertes) + n_closes
+    return {
+        "n_dette": len(dette),
+        "dette": dette,
+        "n_ouvertes": len(ouvertes),
+        "n_closes": n_closes,
+        "n_multi_fiches": n_multi,
+        "n_actionnables": n_actionnables,
+        "n_jours": n_jours,
+    }
+
+
+# =========================================================================== #
+# Helpers internes
+# =========================================================================== #
+class _Namespace:
+    """Petit porteur d'attributs pour les API bibliothèque de nexus_lecons
+    (add/appliquer attendent un objet façon argparse)."""
+    def __init__(self, **kw):
+        self.__dict__.update(kw)
+
+
+def _statut_force(resultat):
+    """Réduit `resultat` au vocabulaire que calculer_forces COMPTE : succes|echec.
+    Vérifié dans nexus_force.calculer_forces : seuls statut=='succes' (+1) et
+    statut=='echec' (-1) bougent la force ; 'ok'/'partiel' sont ignorés (c'est
+    exactement pourquoi la force restait plate). On lève sur tout le reste plutôt
+    que d'émettre un capteur inerte."""
+    if resultat in (True,):
+        return "succes"
+    if resultat in (False,):
+        return "echec"
+    r = str(resultat).strip().lower()
+    if r in ("succes", "succès", "reussi", "réussi", "reussite", "ok_succes", "mieux"):
+        return "succes"
+    if r in ("echec", "échec", "echoue", "échoué", "rate", "raté", "pire"):
+        return "echec"
+    raise ValueError(
+        "appliquer: 'resultat' doit se réduire à succes|echec (les seuls statuts "
+        "comptés par calculer_forces). Reçu %r — 'ok'/'partiel' laisseraient la "
+        "force plate." % (resultat,))
+
+
+def _slug_de(cand):
+    f = cand.get("file", "")
+    return f[:-3] if f.endswith(".md") else f
+
+
+def _candidats():
+    """Collecte les fiches criteres-kily du corpus réel (structure/<dom>/criteres-kily),
+    au format candidat attendu par rank() (mêmes clés que memory_api._scan :
+    file / path / _search / etc.). C'est de l'I/O de COLLECTE, pas du classement.
+
+    Portée = la catégorie criteres-kily sur tous les domaines : les critères
+    capitalisés se départagent entre eux, ce qui garde une consultation
+    fiche-unique naturelle. rank() lit ces candidats à l'identique du recall."""
+    racine = _racine()
+    struct = _dir_structure()
+    out = []
+    if not os.path.isdir(struct):
+        return out
+    for dirpath, _dirs, files in os.walk(struct):
+        if os.path.basename(dirpath) != CATEGORIE:
+            continue
+        for fl in sorted(files):
+            if not fl.endswith(".md") or fl == "_index.md":
+                continue
+            full = os.path.join(dirpath, fl)
+            rel = os.path.relpath(full, racine)
+            parts = rel.split(os.sep)
+            domain = parts[1] if len(parts) >= 3 else None
+            category = parts[2] if len(parts) >= 4 else None
+            try:
+                text = open(full, encoding="utf-8").read()
+            except OSError:
+                continue
+            out.append({
+                "etage": "structure", "domain": domain, "category": category,
+                "file": fl, "path": rel, "excerpt": text[:400],
+                "_search": (text + " " + fl).lower(),
+            })
+    return out
+
+
+def _lire_consultations():
+    chemin = _chemin_consultations()
+    if not os.path.exists(chemin):
+        return []
+    out = []
+    for line in open(chemin, encoding="utf-8"):
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            out.append(json.loads(line))
+        except ValueError:
+            continue          # ligne corrompue ignorée (robustesse bilan)
+    return out
+
+
+def _consultation(cid):
+    """Dernier enregistrement d'OUVERTURE pour cet id (fold last-write-wins)."""
+    trouve = None
+    for rec in _lire_consultations():
+        if rec.get("type") == "consultation" and rec.get("id") == cid:
+            trouve = rec
+    return trouve
+
+
+def _append_consultation(rec):
+    chemin = _chemin_consultations()
+    os.makedirs(os.path.dirname(chemin), exist_ok=True)
+    with open(chemin, "a", encoding="utf-8") as f:
+        f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+
+
+def _prochain_id():
+    n = sum(1 for r in _lire_consultations() if r.get("type") == "consultation")
+    return "cons-%04d" % (n + 1)
+
+
+def _to_dt(x):
+    if isinstance(x, datetime.datetime):
+        return x
+    return datetime.datetime.fromisoformat(str(x))
+
+
+def _age_jours(ts, ref):
+    if not ts:
+        return None
+    try:
+        t = datetime.datetime.fromisoformat(str(ts))
+    except ValueError:
+        return None
+    return (ref - t).total_seconds() / 86400.0
