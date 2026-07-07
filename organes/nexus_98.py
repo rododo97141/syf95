@@ -35,6 +35,29 @@ ROOT = os.path.join(SCRIPT_DIR, "memoire_data")
 BACKLOG_VIGILANCE = 3    # PROVISOIRE
 BACKLOG_ALERTE = 10      # PROVISOIRE
 
+# --------------------------------------------------------------------------- #
+# Seuils BUDGETS DE BOUCLE (nexus_budget) — PROVISOIRES, LARGES, non dérivés des
+# mocks. 98 LIT (jamais ne pilote, jamais ne tombe) : consommé/plafond réels,
+# TAUX de coupures (une coupure ISOLÉE = ok-inerte, PAS d'alerte : seule la
+# RÉCURRENCE donne VIGILANCE puis ALERTE) et profondeur/TENDANCE de la file
+# à-valider (croissance monotone sur k cycles = signal).
+# Déclencheur de révision : recaler sur la distribution réelle des N premières
+# conversations réelles journalisées (cf. tableau du rapport de PR).
+# --------------------------------------------------------------------------- #
+BUDGET_COUPURES_VIGILANCE = 2   # PROVISOIRE : 1 coupure = ok-inerte (rien) ; ≥2 = vigilance.
+BUDGET_COUPURES_ALERTE = 6      # PROVISOIRE : coupures récurrentes = alerte.
+AVALIDER_TENDANCE_K = 3         # PROVISOIRE : croissance monotone sur k cycles = signal.
+
+# Préfixes des capteurs budget — source unique nexus_budget, import DÉFENSIF
+# (98 doit rester debout même si le module budget est indisponible).
+try:
+    import nexus_budget
+    _PREFIXE_COUPURE = nexus_budget.TACHE_COUPURE
+    _PREFIXE_ITER92 = nexus_budget.TACHE_ITERATION_92
+except Exception:  # pragma: no cover - repli si organes/nexus_budget absent
+    _PREFIXE_COUPURE = "budget:coupure"
+    _PREFIXE_ITER92 = "iteration-92"
+
 
 def backlog_capital():
     """Lecture SEULE du backlog HITL via nexus_capital.bilan(). Ne lève JAMAIS :
@@ -71,16 +94,144 @@ def signal_backlog(bilan):
     return None
 
 
-def calc_verdict(signaux, n_dette=0):
+def calc_verdict(signaux, n_dette=0, n_coupures=0):
     """Verdict de santé (fonction PURE, testable sans serveur). Reprend la règle
-    historique fondée sur le NOMBRE de signaux, et laisse le backlog HITL la
-    faire monter par SEUIL : dette ≥ seuil d'ALERTE force l'ALERTE même en solo,
-    dette ≥ seuil de VIGILANCE force au moins la VIGILANCE."""
-    if n_dette >= BACKLOG_ALERTE or len(signaux) > 2:
+    historique fondée sur le NOMBRE de signaux, et laisse le backlog HITL ET le
+    TAUX de coupures budget la faire monter par SEUIL. Une coupure ISOLÉE
+    (n_coupures < seuil de vigilance) ne fait RIEN monter : ok-inerte."""
+    if (n_dette >= BACKLOG_ALERTE or n_coupures >= BUDGET_COUPURES_ALERTE
+            or len(signaux) > 2):
         return "🔴 ALERTE — plusieurs signaux, intervention recommandée"
-    if signaux or n_dette >= BACKLOG_VIGILANCE:
+    if (signaux or n_dette >= BACKLOG_VIGILANCE
+            or n_coupures >= BUDGET_COUPURES_VIGILANCE):
         return "🟡 VIGILANCE — quelques signaux, rien de critique"
     return "🟢 SAIN — l'organisme va bien"
+
+
+# --------------------------------------------------------------------------- #
+# BUDGETS DE BOUCLE — bilan LECTURE SEULE (ne peut JAMAIS faire tomber 98).
+# Tout est défensif : capteurs corrompus, note illisible, état absent → valeurs
+# neutres, jamais d'exception qui remonterait au verdict.
+# --------------------------------------------------------------------------- #
+def evenements_coupure(cap):
+    """Extrait des capteurs les événements de coupure budget (note décodée),
+    LECTURE SEULE et défensive : jamais d'exception."""
+    out = []
+    for e in (cap or []):
+        try:
+            if not str(e.get("tache", "")).startswith(_PREFIXE_COUPURE):
+                continue
+            try:
+                info = json.loads(e.get("note") or "{}")
+            except Exception:
+                info = {}
+            out.append(info if isinstance(info, dict) else {})
+        except Exception:
+            continue
+    return out
+
+
+def taux_coupures(cap):
+    """Nombre de coupures budget captées (le « taux » brut ; une coupure isolée
+    n'est PAS une alerte — cf. signal_coupures)."""
+    return len(evenements_coupure(cap))
+
+
+def signal_coupures(n):
+    """Signal de danger dérivé du TAUX de coupures, ou None. Coupure ISOLÉE =
+    ok-inerte (n < seuil de vigilance → None) : seule la RÉCURRENCE parle."""
+    if n >= BUDGET_COUPURES_ALERTE:
+        return ("🔴 coupures budget récurrentes (%d ≥ %d) — deux boucles se "
+                "répondent-elles sans fin ? (nexus_budget)" % (n, BUDGET_COUPURES_ALERTE))
+    if n >= BUDGET_COUPURES_VIGILANCE:
+        return ("🟠 coupures budget répétées (%d) — surveiller échanges/plafonds "
+                "(nexus_budget)" % n)
+    return None
+
+
+def profondeur_a_valider(etat_boucle):
+    """Profondeur ACTUELLE de la file à-valider (auto-mandat au plafond).
+    Défensive : état absent/mauvais → 0."""
+    try:
+        return max(0, int(len((etat_boucle or {}).get("a_valider", []))))
+    except Exception:
+        return 0
+
+
+def tendance_a_valider(etat_boucle, k=AVALIDER_TENDANCE_K):
+    """True si la file à-valider croît de façon MONOTONE sur les k derniers
+    cycles (backlog qui s'installe = signal). Défensive : série trop courte,
+    absente ou mauvaise → False."""
+    try:
+        serie = [int(x) for x in (etat_boucle or {}).get("a_valider_historique", [])]
+        serie = serie[-k:]
+        if k < 2 or len(serie) < k:
+            return False
+        return all(serie[i] < serie[i + 1] for i in range(len(serie) - 1))
+    except Exception:
+        return False
+
+
+def signal_a_valider(etat_boucle, k=AVALIDER_TENDANCE_K):
+    """Signal si la file à-valider croît en profondeur ET en tendance, ou None."""
+    prof = profondeur_a_valider(etat_boucle)
+    if prof > 0 and tendance_a_valider(etat_boucle, k):
+        return ("🟠 file à-valider en croissance monotone sur %d cycles "
+                "(profondeur %d) — auto-mandat sature, valider/borner" % (k, prof))
+    return None
+
+
+def iterations_92(cap):
+    """Compte les marqueurs d'itération d'expert-92 (runner futur, hors code).
+    Statut VISIBLE-SI-LA-SUPERVISION-TRACE : n'est affiché que s'il en existe."""
+    n = 0
+    for e in (cap or []):
+        try:
+            if str(e.get("tache", "")).startswith(_PREFIXE_ITER92):
+                n += 1
+        except Exception:
+            continue
+    return n
+
+
+def bilan_budget(cap, etat_boucle=None):
+    """Bilan budget LECTURE SEULE pour 98 : consommé/plafond RÉELS par fil coupé,
+    taux de coupures, profondeur ET tendance de la file à-valider, marqueurs 92.
+    Ne lève JAMAIS — cette lecture ne peut pas faire tomber 98 (tout défensif →
+    dict neutre en dernier recours). Les budgets LOCAUX ne bornent PAS le coût
+    GLOBAL (produit, pas somme) : 98 affiche le réel, le budget-tokens est un
+    chantier DISTINCT."""
+    try:
+        evs = evenements_coupure(cap)
+        fils = {}
+        for info in evs:
+            cle = str(info.get("cle"))
+            fils[cle] = {"consomme": info.get("consomme"),
+                         "plafond": info.get("plafond"),
+                         "raison": info.get("raison")}
+        return {
+            "n_coupures": len(evs),
+            "fils_coupes": fils,
+            "profondeur_a_valider": profondeur_a_valider(etat_boucle),
+            "tendance_a_valider": tendance_a_valider(etat_boucle),
+            "iterations_92": iterations_92(cap),
+        }
+    except Exception:
+        return {"n_coupures": 0, "fils_coupes": {}, "profondeur_a_valider": 0,
+                "tendance_a_valider": False, "iterations_92": 0}
+
+
+def _charger_etat_boucle():
+    """Lecture SEULE et DÉFENSIVE de l'état de la boucle (backend/etat_boucle.json)
+    pour la profondeur/tendance de la file à-valider. Absent/corrompu → None :
+    98 rend quand même son verdict (dégradé). Ne lève JAMAIS."""
+    try:
+        chemin = os.path.join(os.path.dirname(SCRIPT_DIR), "backend", "etat_boucle.json")
+        with open(chemin, encoding="utf-8") as f:
+            d = json.load(f)
+        return d if isinstance(d, dict) else None
+    except Exception:
+        return None
 
 
 def _runs_propres(cap):
@@ -223,14 +374,38 @@ def main():
     if sig_bl:
         signaux.append(sig_bl)
 
+    # --- BUDGETS DE BOUCLE (nexus_budget) — LECTURE SEULE, ne peut JAMAIS faire
+    # tomber 98 : bilan_budget avale toute anomalie. Coupure ISOLÉE = ok-inerte
+    # (aucun signal) ; seule la RÉCURRENCE, et la file à-valider en croissance
+    # monotone, montent le verdict. ---
+    etat_boucle = _charger_etat_boucle()
+    bb = bilan_budget(cap, etat_boucle)
+    print(f"   Budgets  : {bb['n_coupures']} coupure(s) captée(s) · "
+          f"file à-valider {bb['profondeur_a_valider']}"
+          f"{' (↗ tendance)' if bb['tendance_a_valider'] else ''}")
+    if bb["fils_coupes"]:
+        for cle, d in bb["fils_coupes"].items():
+            print(f"     · fil {cle} : {d.get('consomme')}/{d.get('plafond')} "
+                  f"({d.get('raison')})  [consommé/plafond RÉELS]")
+    if bb["iterations_92"]:  # VISIBLE-SI-LA-SUPERVISION-TRACE (sinon masqué)
+        print(f"   Itér. 92 : {bb['iterations_92']} marqueur(s) (runner futur, hors code)")
+    print("   ⓘ budgets LOCAUX : bornent chaque fil, PAS le coût GLOBAL "
+          "(produit, pas somme) — budget-tokens = chantier distinct.\n")
+    sig_c = signal_coupures(bb["n_coupures"])
+    if sig_c:
+        signaux.append(sig_c)
+    sig_av = signal_a_valider(etat_boucle)
+    if sig_av:
+        signaux.append(sig_av)
+
     print("🚨 Signaux de danger (Danger Theory — on réagit au dommage) :")
     if signaux:
         for s in signaux: print(f"   {s}")
     else:
         print("   ✅ aucun signal de dommage actif")
 
-    # Verdict de santé (le backlog HITL peut faire monter en VIGILANCE/ALERTE).
-    verdict = calc_verdict(signaux, n_dette)
+    # Verdict de santé (backlog HITL ET taux de coupures peuvent faire monter).
+    verdict = calc_verdict(signaux, n_dette, bb["n_coupures"])
     print(f"\n   VERDICT DE SANTÉ : {verdict}")
 
 if __name__ == "__main__":
