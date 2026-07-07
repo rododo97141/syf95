@@ -156,10 +156,13 @@ def _corps_initial(synth):
     ) or "&mdash;"
 
     if synth["agents"]:
-        cartes = "".join(bureau._carte_agent(a) for a in synth["agents"])
+        # Repli sans JavaScript : les cartes prouvées (échappées) de
+        # nexus_bureau_agentos ; le script les remplace par la scène isométrique.
+        cartes = '<div class="agents">' + "".join(
+            bureau._carte_agent(a) for a in synth["agents"]) + '</div>'
     else:
         cartes = ('<p class="vide">Aucun agent : le bus agentos est vide ou '
-                  'absent. Les cartes appara&icirc;tront d&egrave;s que de '
+                  'absent. La sc&egrave;ne appara&icirc;tra d&egrave;s que de '
                   'vrais agents auront parl&eacute;.</p>')
 
     if synth["flux"]:
@@ -201,11 +204,11 @@ def page_live():
         + bureau._STYLE + _STYLE_LIVE + '\n</head>\n<body>\n'
         '<h1><span class="badge">&#128421;</span> BUREAU NEXUS '
         '<span class="badge">LIVE</span></h1>\n'
-        '<p class="sous">Vue 2D <b>temps r&eacute;el</b> du bus agentos '
-        '(agentos/bus.jsonl), en lecture seule. Le fil et les cartes se '
-        'mettent &agrave; jour tout seuls &mdash; agents R&Eacute;ELS, rien '
-        'n\'est simul&eacute;. <span id="live-etat" class="etat-live">'
-        'connexion&hellip;</span></p>\n'
+        '<p class="sous">Vue <b>isom&eacute;trique temps r&eacute;el</b> du bus '
+        'agentos (agentos/bus.jsonl), en lecture seule. La sc&egrave;ne, le fil '
+        'et les KPIs se mettent &agrave; jour tout seuls &mdash; agents '
+        'R&Eacute;ELS, rien n\'est simul&eacute;. <span id="live-etat" '
+        'class="etat-live">connexion&hellip;</span></p>\n'
         '<div class="kpis">\n'
         f'  <div class="kpi"><span class="n" id="kpi-agents">{kpis["nb_agents"]}'
         '</span><span class="l">agents</span></div>\n'
@@ -216,8 +219,13 @@ def page_live():
         '</div>\n'
         '<div class="grille">\n'
         '  <section class="carte">\n'
-        '    <h2>Agents &mdash; nom, force vivante, dernier message</h2>\n'
-        f'    <div class="agents" id="agents">{cartes}</div>\n'
+        '    <h2>Bureau isom&eacute;trique &mdash; agents sur la grille '
+        '(rang par force)</h2>\n'
+        # #scene reçoit d'abord le rendu de repli (cartes prouvées, échappées,
+        # lisibles sans JavaScript) ; le script remplace ce contenu par la
+        # scène isométrique SVG dès le premier poll.
+        f'    <div class="scene-wrap"><div class="scene" id="scene">{cartes}'
+        '</div></div>\n'
         '  </section>\n'
         '  <section class="carte">\n'
         f'    <h2>Fil de conversation &mdash; live, {bureau.FLUX_MAX_DEFAUT} '
@@ -231,7 +239,10 @@ def page_live():
     )
 
 
-# Complément de style pour l'indicateur « live » (le reste vient de bureau._STYLE).
+# Complément de style : indicateur « live » + SCÈNE ISOMÉTRIQUE (le socle
+# commun — KPIs, cartes de repli, fil — vient toujours de bureau._STYLE, non
+# modifié). Ces règles s'ajoutent APRÈS bureau._STYLE, donc elles peuvent
+# aussi surcharger la grille pour donner à la scène la colonne la plus large.
 _STYLE_LIVE = """
 <style>
   .etat-live { color:var(--sourd); font-size:11px; margin-left:6px; }
@@ -239,11 +250,40 @@ _STYLE_LIVE = """
   .etat-live.ko { color:var(--rose); }
   ul.fil li.neuf { animation:apparait .8s ease; }
   @keyframes apparait { from { background:rgba(79,192,122,.18); } to { background:transparent; } }
+
+  /* La scène prend la colonne large ; le fil + KPIs restent à côté. */
+  .grille { grid-template-columns:minmax(320px,3fr) minmax(260px,2fr); }
+  @media (max-width:820px){ .grille { grid-template-columns:1fr; } }
+
+  /* Scène isométrique : une grille en losanges, agents en jetons élevés.
+     TOUT est décoratif — la position d'un agent est une convention de
+     visualisation (rang par force), pas une coordonnée venue du serveur. */
+  .scene-wrap { background:radial-gradient(circle at 50% 36%,
+                rgba(61,111,224,.12), transparent 70%);
+                border-radius:8px; overflow:auto; padding:6px; }
+  svg.iso { display:block; width:100%; height:auto; max-height:560px; }
+  svg.iso .tuile { fill:rgba(61,111,224,.05); stroke:var(--ligne); stroke-width:1; }
+  svg.iso .tuile-b { fill:rgba(61,111,224,.11); }
+  svg.iso .ombre { fill:rgba(0,0,0,.30); }
+  svg.iso .mat { stroke:var(--ligne); stroke-width:1.5; }
+  svg.iso .jeton { stroke:#0f1420; stroke-width:2; }
+  svg.iso .jeton.actif { stroke:var(--or); stroke-width:2.5;
+                         animation:pulse-iso 1.3s ease-in-out infinite; }
+  @keyframes pulse-iso { 0%,100% { opacity:1; } 50% { opacity:.55; } }
+  svg.iso .rang { fill:#0f1420; font:700 11px system-ui, sans-serif; text-anchor:middle; }
+  svg.iso .nom-iso { fill:var(--texte); font:600 12px system-ui, sans-serif; text-anchor:middle; }
+  svg.iso .force-iso { fill:var(--or); font:700 10px system-ui, sans-serif; text-anchor:middle; }
+  svg.iso g.agent-iso { cursor:default; }
+  .scene .vide { color:var(--sourd); font-style:italic; }
 </style>"""
 
 
-# Script de poll : reconstruit cartes + fil + KPIs depuis les messages ACCUMULÉS
-# (poll incrémental via tail-since-offset). Tout texte est ÉCHAPPÉ avant le DOM.
+# Script de poll : reconstruit la SCÈNE ISOMÉTRIQUE + fil + KPIs depuis les
+# messages ACCUMULÉS (poll incrémental via tail-since-offset). Tout texte est
+# ÉCHAPPÉ avant le DOM. La scène est bâtie en SVG vanilla (aucune dépendance) ;
+# les positions des agents sont calculées ICI, côté client, comme une simple
+# convention de visualisation (rang par force sur une grille en losanges) —
+# aucune coordonnée réelle ni sémantique de position ne vient du serveur.
 _SCRIPT_LIVE = r"""
 var MSG = [];            /* tous les messages vus (rendu initial + deltas) */
 var offset = CFG.offset; /* on démarre APRÈS le rendu initial de la page */
@@ -282,24 +322,107 @@ function agentsDe() {
   return Object.keys(noms);
 }
 
-function carteAgent(nom) {
-  var dernier = null;
+/* Dernier message EMIS par un agent (couleur du jeton + infobulle). */
+function dernierEmis(nom) {
   for (var i = MSG.length - 1; i >= 0; i--) {
-    if (MSG[i].expediteur === nom) { dernier = MSG[i]; break; }
+    if (MSG[i].expediteur === nom) return MSG[i];
   }
-  var f = forceDe(nom).toFixed(4).replace(/\.?0+$/, "");
-  var det;
-  if (dernier) {
-    var typ = dernier.type || "?";
-    det = '<p class="dernier"><span class="type t-' + esc(typ) + '">' + esc(typ) +
-          '</span> ' + esc(resumer(dernier.contenu)) + '</p>' +
-          '<p class="ts">' + esc(dernier.ts || "") + '</p>';
-  } else {
-    det = '<p class="dernier vide">silencieux &mdash; aucun message émis</p>';
+  return null;
+}
+
+/* --- Rendu isometrique (SVG vanilla) ------------------------------------- */
+/* Projection losange d'une cellule (col,row) vers un point ecran. La cellule
+   est PUREMENT decorative : on range les agents (deja tries par force) ligne
+   par ligne. Rien de ceci n'est une position reelle -- le serveur ne fournit
+   ni x, ni y, ni rang ; on les DEDUIT ici de ce que /events renvoie deja. */
+var ISO_TW = 190, ISO_TH = 96, ISO_LIFT = 46;
+
+function isoCentre(col, row) {
+  return { x: (col - row) * (ISO_TW / 2), y: (col + row) * (ISO_TH / 2) };
+}
+
+function couleurType(t) {
+  return ({ demande: "#3d6fe0", reponse: "#4fc07a",
+            proposition: "#9a7be0", capteur: "#e07ba8" })[t] || "#8b94ab";
+}
+
+function losange(cx, cy, w, h, cls) {
+  var pts = [[cx, cy - h / 2], [cx + w / 2, cy], [cx, cy + h / 2], [cx - w / 2, cy]]
+    .map(function (p) { return p[0].toFixed(1) + "," + p[1].toFixed(1); }).join(" ");
+  return '<polygon points="' + pts + '" class="' + cls + '"/>';
+}
+
+function rendreScene(noms) {
+  var zone = document.getElementById("scene");
+  if (!noms.length) {
+    zone.innerHTML = '<p class="vide">Aucun agent : le bus agentos est vide ou absent.</p>';
+    return;
   }
-  return '<div class="agent"><div class="agent-tete">' +
-    '<span class="nom">' + esc(nom) + '</span>' +
-    '<span class="force">&times;' + esc(f) + '</span></div>' + det + '</div>';
+
+  /* Grille aussi carree que possible, remplie ligne par ligne (decoratif). */
+  var cols = Math.max(1, Math.ceil(Math.sqrt(noms.length)));
+  var cellules = noms.map(function (nom, i) {
+    var c = isoCentre(i % cols, Math.floor(i / cols));
+    return { nom: nom, cx: c.x, cy: c.y, rang: i + 1 };
+  });
+
+  /* viewBox englobant : losanges du sol + elevation des jetons + etiquettes. */
+  var minX = 1e9, maxX = -1e9, minY = 1e9, maxY = -1e9;
+  cellules.forEach(function (k) {
+    if (k.cx - ISO_TW / 2 < minX) minX = k.cx - ISO_TW / 2;
+    if (k.cx + ISO_TW / 2 > maxX) maxX = k.cx + ISO_TW / 2;
+    if (k.cy - ISO_TH / 2 - ISO_LIFT - 30 < minY) minY = k.cy - ISO_TH / 2 - ISO_LIFT - 30;
+    if (k.cy + ISO_TH / 2 + 14 > maxY) maxY = k.cy + ISO_TH / 2 + 14;
+  });
+  var pad = 26, vbW = (maxX - minX) + 2 * pad, vbH = (maxY - minY) + 2 * pad;
+
+  var dernierGlobal = MSG.length ? MSG[MSG.length - 1].expediteur : null;
+
+  /* SVG inline SANS xmlns : injecte via innerHTML, le parseur HTML place les
+     noeuds dans l'espace de noms SVG tout seul (aucune URL, zero dependance). */
+  var svg = '<svg class="iso" viewBox="' + (minX - pad).toFixed(1) + " " +
+    (minY - pad).toFixed(1) + " " + vbW.toFixed(1) + " " + vbH.toFixed(1) +
+    '" preserveAspectRatio="xMidYMid meet" role="img" ' +
+    'aria-label="Scene isometrique des agents">';
+
+  /* 1) Le sol : une tuile en losange par cellule (damier discret). */
+  cellules.forEach(function (k, i) {
+    svg += losange(k.cx, k.cy, ISO_TW, ISO_TH, "tuile" + (i % 2 ? " tuile-b" : ""));
+  });
+
+  /* 2) Les agents : ombre au sol, mat, jeton eleve colore par le type du
+        dernier message, rang par force, nom, force, infobulle ECHAPPEE. */
+  cellules.forEach(function (k) {
+    var dernier = dernierEmis(k.nom);
+    var typ = dernier ? (dernier.type || "?") : null;
+    var coul = typ ? couleurType(typ) : "#8b94ab";
+    var f = forceDe(k.nom);
+    var r = 13 + Math.min(11, Math.max(0, (f - CFG.force_defaut) * 6));
+    var tx = k.cx, ty = k.cy - ISO_LIFT;
+    var actif = dernier && k.nom === dernierGlobal;
+    var infobulle = dernier
+      ? esc(k.nom) + " - " + esc(typ) + " : " + esc(resumer(dernier.contenu))
+      : esc(k.nom) + " - silencieux, aucun message emis";
+    var fTxt = f.toFixed(4).replace(/\.?0+$/, "");
+    svg += '<g class="agent-iso"><title>' + infobulle + '</title>';
+    svg += losange(k.cx, k.cy, 40, 20, "ombre");
+    svg += '<line x1="' + k.cx.toFixed(1) + '" y1="' + k.cy.toFixed(1) +
+      '" x2="' + tx.toFixed(1) + '" y2="' + ty.toFixed(1) + '" class="mat"/>';
+    svg += '<circle cx="' + tx.toFixed(1) + '" cy="' + ty.toFixed(1) + '" r="' +
+      r.toFixed(1) + '" fill="' + coul + '" class="jeton' + (actif ? " actif" : "") + '"/>';
+    svg += '<text x="' + tx.toFixed(1) + '" y="' + (ty + 4).toFixed(1) +
+      '" class="rang">' + k.rang + '</text>';
+    svg += '<text x="' + tx.toFixed(1) + '" y="' + (ty - r - 8).toFixed(1) +
+      '" class="nom-iso">' + esc(k.nom) + '</text>';
+    /* Force accrochee AU jeton (juste dessous) : elle suit l'elevation et
+       n'empiete pas sur les tuiles voisines. */
+    svg += '<text x="' + tx.toFixed(1) + '" y="' + (ty + r + 14).toFixed(1) +
+      '" class="force-iso">x' + esc(fTxt) + '</text>';
+    svg += '</g>';
+  });
+
+  svg += '</svg>';
+  zone.innerHTML = svg;
 }
 
 function ligneFil(m, neuf) {
@@ -316,15 +439,13 @@ function ligneFil(m, neuf) {
 }
 
 function rendre(nbNeufs) {
-  /* Cartes : triées par force décroissante puis nom. */
+  /* Agents tries par force decroissante puis nom : cet ORDRE fixe le rang et
+     donc la place de chacun sur la grille isometrique (decoratif). */
   var noms = agentsDe().sort(function (a, b) {
     var d = forceDe(b) - forceDe(a);
     return d !== 0 ? d : (a < b ? -1 : a > b ? 1 : 0);
   });
-  var zoneA = document.getElementById("agents");
-  zoneA.innerHTML = noms.length
-    ? noms.map(carteAgent).join("")
-    : '<p class="vide">Aucun agent : le bus agentos est vide ou absent.</p>';
+  rendreScene(noms);
 
   /* Fil : les CFG.flux_max derniers, les plus récents en tête. */
   var recents = MSG.slice(-CFG.flux_max);
