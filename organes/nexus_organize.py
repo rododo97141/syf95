@@ -88,6 +88,15 @@ def main():
         actions.append(f"reconcile ({'apply' if apply else 'dry-run'}) : {resume}")
         print(f"   🧹 Nettoyage en_attente (reconcile) : {resume}")
 
+    # Passe de triage de la promotion (câblage minimal, TOUJOURS dry-run ici :
+    # apply n'exécute QUE des ids confirmés HUMAINEMENT, jamais depuis organize).
+    promo = os.path.join(HERE, "nexus_promotion.py")
+    if os.path.exists(promo):
+        out = subprocess.run(["python3", promo], capture_output=True, text=True).stdout.strip().splitlines()
+        resume = next((l.strip() for l in out if "proposé" in l), out[-1].strip() if out else "")
+        actions.append(f"promotion (dry-run) : {resume}")
+        print(f"   🔁 Triage promotion (dry-run) : {resume or 'rien à signaler'}")
+
     # --- 3. CHANGEMENTS depuis la dernière passe ---
     prev = derniere_passe()
     if prev:

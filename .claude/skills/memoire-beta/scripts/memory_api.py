@@ -26,6 +26,9 @@ Endpoints :
     POST /stage       {content, domain, category, title?, summary?,    -> EN_ATTENTE
                        source?, origin?}
     POST /promote     {id, domain?, category?}                         -> STRUCTURE (dédup)
+    POST /clore       {id, raison(doublon|rejete|perime), pointeur?,   -> ARCHIVE (transit)
+                       score?, examens?}
+    POST /reactiver   {id}                                             -> EN_ATTENTE (retour)
     POST /memorize    {content, domain, category, title?, summary?,    -> STRUCTURE (direct)
                        source?}
     GET  /recall?query=&domain=&category=&scope=all|brut|en_attente|structure
@@ -270,6 +273,143 @@ def promote(data):
 
 
 # --------------------------------------------------------------------------- #
+# Cycle de vie de la file en_attente — CLORE / REACTIVER
+# --------------------------------------------------------------------------- #
+# en_attente est une file de TRANSIT, pas un cimetière. Chaque candidat a quatre
+# sorties, toutes tracées, AUCUNE destructive :
+#   - promu           (promote — écrit en structure, byte-identique) ;
+#   - doublon         (proposition machine + confirmation HUMAINE) ;
+#   - rejeté          (décision active du superviseur) ;
+#   - périmé          (RÉSIDU du triage : N examens journalisés sans décision).
+# clore() déplace en_attente -> archive/en_attente/ (JAMAIS de suppression) et
+# journalise l'événement (append-only). reactiver() fait le retour inverse et
+# journalise aussi. memory_api est le SEUL écrivain de en_attente/ et archive/.
+RAISONS_CLOTURE = ("doublon", "rejete", "perime")
+
+
+def now_iso():
+    """Horodatage ISO à la microseconde : ordre strict entre opérations
+    séquentielles (jamais de collision entre deux écritures du journal)."""
+    return datetime.datetime.now().isoformat(timespec="microseconds")
+
+
+def _archive_attente():
+    # Recalculé depuis ARCHIVE à chaque appel : suit une redirection de racine
+    # (les tests réécrivent ARCHIVE après import).
+    return os.path.join(ARCHIVE, "en_attente")
+
+
+def _cloture_journal():
+    return os.path.join(ARCHIVE, "clotures.jsonl")
+
+
+def _append_cloture(entry):
+    """Ajoute une ligne au journal de clôture (append-only, jamais réécrit)."""
+    os.makedirs(os.path.dirname(_cloture_journal()), exist_ok=True)
+    with open(_cloture_journal(), "a", encoding="utf-8") as f:
+        f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+
+
+def lire_clotures():
+    """Lecture DÉFENSIVE du journal de clôture (ordre d'écriture préservé).
+    Fichier absent → []. Lignes corrompues ignorées. Ne lève jamais."""
+    out = []
+    path = _cloture_journal()
+    if not os.path.exists(path):
+        return out
+    try:
+        with open(path, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    out.append(json.loads(line))
+                except ValueError:
+                    continue
+    except OSError:
+        return out
+    return out
+
+
+def _bump_reactivations(path):
+    """Incrémente meta['reactivations'] dans le fichier (nouvelle ÉPOQUE d'entrée
+    en file). La fenêtre d'examens du candidat se compte dans cette époque :
+    un réactivé repart donc à zéro. Renvoie la nouvelle valeur d'époque."""
+    with open(path, encoding="utf-8") as f:
+        text = f.read()
+    m = re.search(r"<!-- meta: (.*?) -->", text, re.S)
+    meta = json.loads(m.group(1)) if m else {}
+    meta["reactivations"] = int(meta.get("reactivations", 0)) + 1
+    remplacement = "<!-- meta: %s -->" % json.dumps(meta, ensure_ascii=False)
+    if m:
+        text = text[:m.start()] + remplacement + text[m.end():]
+    else:
+        text = remplacement + "\n" + text
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(text)
+    return meta["reactivations"]
+
+
+def clore(sid, raison, pointeur=None, score=None, examens=None):
+    """Clôt un candidat en_attente : le DÉPLACE vers archive/en_attente/ (JAMAIS
+    de suppression) et journalise (id, raison, pointeur, score, examens, date).
+
+    raison ∈ {doublon, rejete, perime}. clore sur un id ABSENT = NO-OP TRACÉ :
+    jamais d'erreur, jamais d'action sur archive, mais l'événement est journalisé
+    (marqué noop) pour que la trace reste complète."""
+    sid = (sid or "").strip()
+    raison = (raison or "").strip()
+    if not sid:
+        return {"error": "champ 'id' requis"}
+    if raison not in RAISONS_CLOTURE:
+        return {"error": "raison invalide: %s (attendu %s)"
+                % (raison, "|".join(RAISONS_CLOTURE))}
+    src = os.path.join(EN_ATTENTE, sid + ".md")
+    entry = {"id": sid, "event": "clore", "raison": raison, "pointeur": pointeur,
+             "score": score, "examens": examens, "date": now_iso()}
+    if not os.path.exists(src):
+        entry["noop"] = True
+        _append_cloture(entry)
+        return {"ok": True, "noop": True, "id": sid, "raison": raison,
+                "message": "id absent de en_attente : clôture no-op tracée"}
+    dest_dir = _archive_attente()
+    os.makedirs(dest_dir, exist_ok=True)
+    dest = os.path.join(dest_dir, sid + ".md")
+    shutil.move(src, dest)                    # déplacement, JAMAIS suppression
+    entry["noop"] = False
+    entry["archive"] = os.path.relpath(dest, ROOT)
+    _append_cloture(entry)
+    return {"ok": True, "id": sid, "raison": raison,
+            "archive": os.path.relpath(dest, ROOT)}
+
+
+def reactiver(sid):
+    """Réactive un candidat archivé : le déplace archive/en_attente/ -> en_attente/
+    et journalise. Le compteur d'examens REPART À ZÉRO (l'époque d'entrée est
+    incrémentée). reactiver sur un id absent = NO-OP TRACÉ (jamais d'erreur)."""
+    sid = (sid or "").strip()
+    if not sid:
+        return {"error": "champ 'id' requis"}
+    src = os.path.join(_archive_attente(), sid + ".md")
+    entry = {"id": sid, "event": "reactiver", "date": now_iso()}
+    if not os.path.exists(src):
+        entry["noop"] = True
+        _append_cloture(entry)
+        return {"ok": True, "noop": True, "id": sid,
+                "message": "id absent de l'archive : réactivation no-op tracée"}
+    os.makedirs(EN_ATTENTE, exist_ok=True)
+    dest = os.path.join(EN_ATTENTE, sid + ".md")
+    epoch = _bump_reactivations(src)          # nouvelle époque AVANT le déplacement
+    shutil.move(src, dest)
+    entry["noop"] = False
+    entry["reactivations"] = epoch
+    _append_cloture(entry)
+    return {"ok": True, "id": sid, "reactivations": epoch,
+            "en_attente": os.path.relpath(dest, ROOT)}
+
+
+# --------------------------------------------------------------------------- #
 # GET /domains et /recall
 # --------------------------------------------------------------------------- #
 def get_domains():
@@ -357,6 +497,28 @@ def _force_for(forces, fl, rel):
     return 1.0
 
 
+def idf_sur_corpus(tokens, corpus_token_sets):
+    """IDF lissé de `tokens` sur un corpus, en fonction PURE et réutilisable.
+
+    `corpus_token_sets` : itérable de conteneurs de tokens — un par document du
+    corpus (idéalement des ensembles). N = nombre de documents ; pour chaque
+    token DISTINCT, df = nombre de documents le contenant, et
+    IDF = log((N+1)/(df+1)) + 1 — la MÊME formule lissée qu'historiquement :
+    ~1 pour un token présent partout (aucun gagnant confiant), élevé pour un
+    token rare/distinctif. Corpus vide → N = 1 (bornes identiques à l'ancien
+    code, qui prenait `len(cands) or 1`).
+
+    Renvoie {token: idf}. Extraite telle quelle de rank_candidates, qui l'appelle
+    désormais : comportement PROUVÉ inchangé (mêmes entrées → mêmes sorties)."""
+    corpus = list(corpus_token_sets)
+    n = len(corpus) or 1
+    idf = {}
+    for t in dict.fromkeys(tokens):                        # dédup, ordre stable
+        df = sum(1 for toks in corpus if t in toks)
+        idf[t] = math.log((n + 1) / (df + 1)) + 1.0
+    return idf
+
+
 def rank_candidates(query, cands, forces=None):
     """Classe des candidats (chacun portant la clé « _search ») par
     pertinence(IDF) × force, sans les modifier en place.
@@ -365,6 +527,8 @@ def rank_candidates(query, cands, forces=None):
     dans la fiche (présence binaire : le bourrage de mots-clés n'élève pas le
     score). IDF lissé = log((N+1)/(df+1)) + 1 : ~1 pour un token présent
     partout (aucun gagnant confiant), élevé pour un token rare/distinctif.
+    Le calcul de l'IDF est délégué à `idf_sur_corpus` (fonction pure) — même
+    formule, comportement inchangé.
 
     Renvoie une nouvelle liste triée par score décroissant (départage stable
     par chemin puis nom), chaque élément enrichi de « _relevance », « _force »
@@ -372,14 +536,8 @@ def rank_candidates(query, cands, forces=None):
     if forces is None:
         forces = load_forces()
     qtokens = list(dict.fromkeys(_tokens(query)))          # dédup, ordre stable
-    n = len(cands) or 1
     cand_tokens = [set(_tokens(c.get("_search", ""))) for c in cands]
-    df = {t: 0 for t in qtokens}
-    for toks in cand_tokens:
-        for t in qtokens:
-            if t in toks:
-                df[t] += 1
-    idf = {t: math.log((n + 1) / (df[t] + 1)) + 1.0 for t in qtokens}
+    idf = idf_sur_corpus(qtokens, cand_tokens)
     ranked = []
     for c, toks in zip(cands, cand_tokens):
         rel = sum(idf[t] for t in qtokens if t in toks)
@@ -628,6 +786,13 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(stage(data))
         if u.path == "/promote":
             res = promote(data)
+            return self._send(res, 400 if "error" in res else 200)
+        if u.path == "/clore":
+            res = clore(data.get("id"), data.get("raison"),
+                        data.get("pointeur"), data.get("score"), data.get("examens"))
+            return self._send(res, 400 if "error" in res else 200)
+        if u.path == "/reactiver":
+            res = reactiver(data.get("id"))
             return self._send(res, 400 if "error" in res else 200)
         if u.path == "/memorize":
             if not (data.get("content") or "").strip():

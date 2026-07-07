@@ -282,6 +282,152 @@ def vrais_en_attente():
         if not promu: n += 1
     return n
 
+# --------------------------------------------------------------------------- #
+# PROMOTION — file en_attente comme TRANSIT (lecture seule, ne tombe JAMAIS).
+# Profondeur + tendance de la file, âge-en-EXAMENS du plus vieux candidat, et
+# comptes d'archives PAR RAISON en repliant le journal de clôture (état courant
+# par id : dernier événement effectif gagne ; un clos-puis-réactivé n'est PAS
+# compté comme archive). Tout est défensif — aucune de ces lectures ne peut
+# faire tomber 98.
+# --------------------------------------------------------------------------- #
+PROMO_TENDANCE_K = 3    # PROVISOIRE : croissance monotone sur k passes = signal.
+
+
+def _clotures_path():
+    return os.path.join(ROOT, "archive", "clotures.jsonl")
+
+
+def _examens_path():
+    return os.path.join(ROOT, "promotion", "examens.jsonl")
+
+
+def _lire_jsonl(path):
+    """Lecture DÉFENSIVE d'un journal .jsonl (append-only). Absent/corrompu →
+    []. Ne lève JAMAIS (un gardien ne tombe pas pour un journal illisible)."""
+    out = []
+    try:
+        with open(path, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    out.append(json.loads(line))
+                except Exception:
+                    continue
+    except Exception:
+        return []
+    return out
+
+
+def archives_par_raison(evenements):
+    """Replie le journal de clôture : état COURANT par id (dernier événement
+    EFFECTIF gagne ; les no-op ne changent pas l'état). Un id clos PUIS réactivé
+    n'est plus compté comme archive. Renvoie {raison: n}. Défensive."""
+    etat = {}
+    for e in (evenements or []):
+        try:
+            if e.get("noop"):
+                continue
+            sid = e.get("id")
+            if sid is None:
+                continue
+            ev = e.get("event")
+            if ev == "clore":
+                etat[sid] = e.get("raison")
+            elif ev == "reactiver":
+                etat[sid] = None      # de retour en file : plus archivé
+        except Exception:
+            continue
+    comptes = {}
+    for _sid, raison in etat.items():
+        if raison is None:
+            continue
+        comptes[raison] = comptes.get(raison, 0) + 1
+    return comptes
+
+
+def profondeur_par_passe(examens):
+    """Profondeur en_attente estimée à chaque passe = nombre d'ids DISTINCTS
+    examinés (une passe est exhaustive). Renvoie [(passe, n)] triée. Défensive."""
+    par = {}
+    for e in (examens or []):
+        try:
+            p = int(e.get("passe", 0))
+            par.setdefault(p, set()).add(e.get("id"))
+        except Exception:
+            continue
+    return [(p, len(par[p])) for p in sorted(par)]
+
+
+def tendance_en_attente(examens, k=PROMO_TENDANCE_K):
+    """True si la profondeur de la file croît de façon MONOTONE sur les k
+    dernières passes (backlog qui s'installe). Série trop courte → False."""
+    try:
+        serie = [n for _p, n in profondeur_par_passe(examens)][-k:]
+        if k < 2 or len(serie) < k:
+            return False
+        return all(serie[i] < serie[i + 1] for i in range(len(serie) - 1))
+    except Exception:
+        return False
+
+
+def _epoch_de(path):
+    """Époque d'entrée (meta['reactivations'], 0 par défaut) d'un fichier
+    en_attente. Lecture seule, défensive."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            txt = f.read()
+        m = re.search(r"<!--\s*meta:\s*(\{.*?\})\s*-->", txt, re.S)
+        if m:
+            return int(json.loads(m.group(1)).get("reactivations", 0))
+    except Exception:
+        pass
+    return 0
+
+
+def age_examens_plus_vieux(examens):
+    """Âge-en-EXAMENS du plus vieux candidat ENCORE en file : max, sur les ids
+    actuellement en en_attente, du nombre d'examens subis dans leur époque
+    courante. Défensive → 0. (« Vieux » se mesure en examens subis, pas en
+    calendrier : cohérent avec le résidu perime-eligible.)"""
+    par_id_epoch = {}
+    for e in (examens or []):
+        try:
+            cle = (e.get("id"), int(e.get("epoch", 0)))
+            par_id_epoch[cle] = par_id_epoch.get(cle, 0) + 1
+        except Exception:
+            continue
+    age = 0
+    try:
+        EN = os.path.join(ROOT, "en_attente")
+        for p in glob.glob(os.path.join(EN, "*.md")):
+            sid = os.path.basename(p)[:-3]
+            age = max(age, par_id_epoch.get((sid, _epoch_de(p)), 0))
+    except Exception:
+        return age
+    return age
+
+
+def bilan_promotion():
+    """Bilan LECTURE SEULE de la file en_attente comme transit. Ne lève JAMAIS
+    (tout défensif → dict neutre en dernier recours) : 98 rend son verdict même
+    si les journaux sont absents/cassés."""
+    try:
+        clo = _lire_jsonl(_clotures_path())
+        exs = _lire_jsonl(_examens_path())
+        depths = profondeur_par_passe(exs)
+        return {
+            "profondeur": depths[-1][1] if depths else 0,
+            "tendance": tendance_en_attente(exs),
+            "age_examens_max": age_examens_plus_vieux(exs),
+            "archives_par_raison": archives_par_raison(clo),
+        }
+    except Exception:
+        return {"profondeur": 0, "tendance": False, "age_examens_max": 0,
+                "archives_par_raison": {}}
+
+
 def get(path):
     with urllib.request.urlopen(BASE + path, timeout=5) as r:
         return json.loads(r.read().decode())
@@ -397,6 +543,18 @@ def main():
     sig_av = signal_a_valider(etat_boucle)
     if sig_av:
         signaux.append(sig_av)
+
+    # --- PROMOTION (file en_attente comme transit) — LECTURE SEULE, ne peut
+    # JAMAIS faire tomber 98 : bilan_promotion avale toute anomalie. On AFFICHE
+    # le réel ; le backlog en_attente reste le signal de danger déjà géré plus
+    # haut (backlog_danger). ---
+    bp = bilan_promotion()
+    arch = bp["archives_par_raison"]
+    resume_arch = (", ".join("%s=%d" % (r, n) for r, n in sorted(arch.items()))
+                   if arch else "aucune")
+    print(f"   Promotion : file {bp['profondeur']}"
+          f"{' (↗ tendance)' if bp['tendance'] else ''} · "
+          f"plus vieux = {bp['age_examens_max']} examen(s) · archives [{resume_arch}]\n")
 
     print("🚨 Signaux de danger (Danger Theory — on réagit au dommage) :")
     if signaux:
