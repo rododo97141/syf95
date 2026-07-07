@@ -29,6 +29,7 @@ Endpoints :
     POST /memorize    {content, domain, category, title?, summary?,    -> STRUCTURE (direct)
                        source?}
     GET  /recall?query=&domain=&category=&scope=all|brut|en_attente|structure
+                 &format=sas   (opt-in : regroupe le classement global par étage)
 """
 
 import os
@@ -399,9 +400,73 @@ def _strip_internal(item):
             "path": item["path"], "excerpt": item["excerpt"]}
 
 
+# --------------------------------------------------------------------------- #
+# SAS mémoire (opt-in format=sas) — étiqueter, jamais cacher ni décoter
+# --------------------------------------------------------------------------- #
+# Le sas ne recalcule RIEN et ne reclasse RIEN : il prend le classement GLOBAL
+# (issu de l'unique appel à rank_candidates dans recall) et le REGROUPE en trois
+# blocs étiquetés — structure (validé) / en_attente (analysé-non-validé) / brut
+# (non-trié) — chacun dans l'ordre du classement global. Il dit au consommateur
+# ce qu'il regarde ; il ne décide pas à sa place.
+_SAS_ETAGES = ("structure", "en_attente", "brut")
+
+
+def _sas_candidat(item):
+    """Forme SAS d'un candidat : la forme publique + les scores du classement
+    global, NON strippés (déjà calculés par rank_candidates : zéro compute
+    nouveau). L'étage est toujours présent — le consommateur DOIT router dessus."""
+    return {
+        "etage": item["etage"], "domain": item["domain"],
+        "category": item["category"], "file": item["file"],
+        "path": item["path"], "excerpt": item["excerpt"],
+        "_relevance": item.get("_relevance", 0.0),
+        "_force": item.get("_force", 1.0),
+        "_score": item.get("_score", 0.0),
+    }
+
+
+def _format_sas(scope, results):
+    """Présentation SAS de `results` (le classement GLOBAL déjà trié et filtré).
+
+    REGROUPEMENT à la présentation seulement : trois blocs étiquetés, jamais
+    fondus, chacun dans l'ordre du classement global. Les blocs sont des
+    sous-suites du défaut : les scores exposés sont ceux du classement global.
+
+    alerte : null si le meilleur candidat structure (validé) tient la tête —
+    égalité inter-étages comprise : le validé gagne. Sinon une liste d'au plus
+    une entrée PAR étage hors-structure dont le meilleur candidat bat
+    STRICTEMENT le meilleur structure. Chaque entrée = {etage, path, ecart} avec
+    ecart = score_étage − score_du_meilleur_structure, ou null si AUCUN structure
+    ne matche (pas de sentinelle, pas de seuil)."""
+    blocs = {e: [] for e in _SAS_ETAGES}
+    for r in results:
+        et = r.get("etage")
+        if et in blocs:
+            blocs[et].append(_sas_candidat(r))
+
+    # results est en ordre de classement global : le 1er de chaque bloc est le
+    # meilleur de son étage.
+    struct_top = blocs["structure"][0]["_score"] if blocs["structure"] else None
+    alerte = []
+    for et in ("en_attente", "brut"):
+        if not blocs[et]:
+            continue
+        meilleur = blocs[et][0]["_score"]
+        if struct_top is None:
+            alerte.append({"etage": et, "path": blocs[et][0]["path"], "ecart": None})
+        elif meilleur > struct_top:  # STRICTEMENT : égalité => le validé garde la tête
+            alerte.append({"etage": et, "path": blocs[et][0]["path"],
+                           "ecart": meilleur - struct_top})
+
+    count = sum(len(blocs[e]) for e in _SAS_ETAGES)
+    return {"ok": True, "scope": scope, "format": "sas", "count": count,
+            "blocs": blocs, "alerte": alerte or None}
+
+
 def recall(params):
     query = (params.get("query", [""])[0] or "").lower()
     scope = (params.get("scope", ["all"])[0] or "all").lower()
+    fmt = (params.get("format", [""])[0] or "").lower()
     fdomain = params.get("domain", [None])[0]
     fcategory = params.get("category", [None])[0]
     fdomain = slugify(fdomain) if fdomain else None
@@ -418,6 +483,8 @@ def recall(params):
     if query:
         ranked = rank_candidates(query, results)
         results = [r for r in ranked if r["_relevance"] > 0]
+    if fmt == "sas":
+        return _format_sas(scope, results)
     out = [_strip_internal(r) for r in results]
     return {"ok": True, "scope": scope, "count": len(out), "results": out}
 
