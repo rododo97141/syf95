@@ -23,6 +23,65 @@ import nexus_vie     # juge de vie des sources : remplacée par une leçon, ou �
 BASE = "http://127.0.0.1:8077"
 ROOT = os.path.join(SCRIPT_DIR, "memoire_data")
 
+# --------------------------------------------------------------------------- #
+# Seuils du backlog HITL (nexus_capital.bilan) — PROVISOIRES, même discipline
+# que les autres jauges v0.1 de 98 (points de départ, pas des valeurs mesurées).
+#   • VIGILANCE dès qu'une petite dette persiste : signal, pas panique.
+#   • ALERTE quand la dette s'installe : des critères tranchés par Kily restent
+#     non capitalisés/non clos — la boucle d'apprentissage fuit.
+# Déclencheur de révision : recaler sur la distribution réelle de n_dette une
+# fois ≥ 30 consultations fiche-unique observées (cf. N_JOURS_DETTE côté capital).
+# --------------------------------------------------------------------------- #
+BACKLOG_VIGILANCE = 3    # PROVISOIRE
+BACKLOG_ALERTE = 10      # PROVISOIRE
+
+
+def backlog_capital():
+    """Lecture SEULE du backlog HITL via nexus_capital.bilan(). Ne lève JAMAIS :
+    module absent, bilan cassé/vide/corrompu → renvoie None, et 98 rend quand
+    même son verdict (dégradé). Un gardien ne doit pas tomber pour un organe
+    périphérique — d'où l'enveloppe défensive TOTALE."""
+    try:
+        import nexus_capital
+        b = nexus_capital.bilan()
+        return b if isinstance(b, dict) else None
+    except Exception:
+        return None
+
+
+def n_dette_backlog(bilan):
+    """Nombre de consultations en dette, extrait défensivement d'un bilan (None,
+    incomplet ou de mauvais type → 0 : jamais d'exception qui remonterait à 98)."""
+    try:
+        return max(0, int((bilan or {}).get("n_dette", 0)))
+    except Exception:
+        return 0
+
+
+def signal_backlog(bilan):
+    """Renvoie un signal de danger (str) selon la dette HITL, ou None sous le
+    seuil de vigilance. Purement dérivé de n_dette_backlog (donc défensif)."""
+    n = n_dette_backlog(bilan)
+    if n >= BACKLOG_ALERTE:
+        return ("🔴 backlog HITL : %d consultation(s) capitalisées en dette "
+                "(>%d) — appliquer/clore (nexus_capital)" % (n, BACKLOG_ALERTE))
+    if n >= BACKLOG_VIGILANCE:
+        return ("🟠 backlog HITL : %d consultation(s) capitalisées non closes "
+                "— appliquer/clore (nexus_capital)" % n)
+    return None
+
+
+def calc_verdict(signaux, n_dette=0):
+    """Verdict de santé (fonction PURE, testable sans serveur). Reprend la règle
+    historique fondée sur le NOMBRE de signaux, et laisse le backlog HITL la
+    faire monter par SEUIL : dette ≥ seuil d'ALERTE force l'ALERTE même en solo,
+    dette ≥ seuil de VIGILANCE force au moins la VIGILANCE."""
+    if n_dette >= BACKLOG_ALERTE or len(signaux) > 2:
+        return "🔴 ALERTE — plusieurs signaux, intervention recommandée"
+    if signaux or n_dette >= BACKLOG_VIGILANCE:
+        return "🟡 VIGILANCE — quelques signaux, rien de critique"
+    return "🟢 SAIN — l'organisme va bien"
+
 
 def _runs_propres(cap):
     """Horloge d'ACTIVITÉ (pas de calendrier) : pour chaque événement i, combien
@@ -154,19 +213,24 @@ def main():
     else:
         print()
 
+    # --- BACKLOG HITL (nexus_capital) — LECTURE SEULE, ne peut JAMAIS faire
+    # tomber 98 : bilan absent/vide/corrompu → backlog_capital() = None, dette 0,
+    # verdict rendu quand même (dégradé). ---
+    bilan_capital = backlog_capital()
+    n_dette = n_dette_backlog(bilan_capital)
+    print(f"   Backlog HITL : {n_dette} consultation(s) capitalisées en dette\n")
+    sig_bl = signal_backlog(bilan_capital)
+    if sig_bl:
+        signaux.append(sig_bl)
+
     print("🚨 Signaux de danger (Danger Theory — on réagit au dommage) :")
     if signaux:
         for s in signaux: print(f"   {s}")
     else:
         print("   ✅ aucun signal de dommage actif")
 
-    # Verdict de santé
-    if not signaux:
-        verdict = "🟢 SAIN — l'organisme va bien"
-    elif len(signaux) <= 2:
-        verdict = "🟡 VIGILANCE — quelques signaux, rien de critique"
-    else:
-        verdict = "🔴 ALERTE — plusieurs signaux, intervention recommandée"
+    # Verdict de santé (le backlog HITL peut faire monter en VIGILANCE/ALERTE).
+    verdict = calc_verdict(signaux, n_dette)
     print(f"\n   VERDICT DE SANTÉ : {verdict}")
 
 if __name__ == "__main__":
