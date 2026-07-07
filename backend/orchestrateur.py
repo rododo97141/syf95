@@ -27,12 +27,24 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
 from filtre_admission import Decision, Ecart, FiltreAdmission
 from moteur import Moteur, MoteurMock
 from orchestrateur_intensite import recommander
+
+# organes/ sur le chemin pour le budget de boucle (le couteau, source unique de
+# la constante de plafond). Import défensif : si le module budget manque, la
+# boucle reste debout avec un repli prudent.
+_ORGANES = Path(__file__).resolve().parent.parent / "organes"
+if str(_ORGANES) not in sys.path:
+    sys.path.insert(0, str(_ORGANES))
+try:
+    from nexus_budget import PLAFOND_AUTOMANDAT_CYCLE
+except Exception:  # pragma: no cover - repli si organes indisponible
+    PLAFOND_AUTOMANDAT_CYCLE = 3
 
 # Fichier d'état par défaut : la « mémoire » de la boucle, à côté de ce script.
 ETAT_DEFAUT = Path(__file__).resolve().parent / "etat_boucle.json"
@@ -116,6 +128,11 @@ def planifier(chemin_etat: Path) -> dict:
         "ecarts_semes": False,        # garde-fou : on ne sème les écarts qu'une fois
         "archive_96": [],             # écarts vus par 96 mais non escaladés
         "journal": [],                # trace lisible des événements
+        # Budget d'auto-mandat (le couteau côté plan) : au plafond du cycle, les
+        # créations vont en file à-valider — RIEN de perdu, plan actif borné.
+        "a_valider": [],              # tâches auto-mandatées en attente de validation
+        "a_valider_historique": [],   # profondeur de la file par cycle (tendance lue par 98)
+        "auto_mandat_cycle": 0,       # créations déjà entrées au plan CE cycle
     }
 
 
@@ -207,52 +224,79 @@ def verifier(tache: dict, resultat: dict) -> tuple[bool, bool, str]:
 # ---------------------------------------------------------------------------
 # Organe 96 : auto-mandat via le filtre d'admission
 # ---------------------------------------------------------------------------
-def detecter_et_filtrer(etat: dict, filtre: FiltreAdmission) -> None:
+def _tache_auto_mandat(etat: dict, resultat) -> dict:
+    """Fabrique la tâche auto-mandatée d'un écart admis (id unique sur l'ensemble
+    plan actif + file à-valider, pour ne jamais réutiliser un id)."""
+    n = len(etat["taches"]) + len(etat.get("a_valider", [])) + 1
+    return {
+        "id": f"t{n}",
+        "libelle": f"[auto-mandat 96] {resultat.ecart.libelle}",
+        "etat": "a_faire",
+        "resultat": None,
+        "verifie": False,
+        "veto": False,
+        "sensible": False,
+    }
+
+
+def inscrire_creation(etat: dict, resultat, plafond_cycle: int) -> str:
+    """Route UNE création auto-mandatée admise : dans le PLAN ACTIF tant que le
+    budget du cycle reste (`auto_mandat_cycle < plafond_cycle`), sinon en FILE
+    À-VALIDER. RIEN n'est perdu (la tâche existe dans l'un ou l'autre) ; le plan
+    actif reste BORNÉ. Renvoie "plan" ou "a_valider" selon la destination."""
+    tache = _tache_auto_mandat(etat, resultat)
+    if etat.get("auto_mandat_cycle", 0) < plafond_cycle:
+        etat["taches"].append(tache)
+        etat["auto_mandat_cycle"] = etat.get("auto_mandat_cycle", 0) + 1
+        etat["journal"].append(
+            f"{_horodatage()} · 96 ADMET {resultat.ecart.identifiant} "
+            f"(priorité {resultat.priorite:.1f} ≥ seuil {resultat.seuil_effectif:.1f}) "
+            f"→ tâche active {tache['id']}"
+        )
+        return "plan"
+    etat.setdefault("a_valider", []).append(tache)
+    etat["journal"].append(
+        f"{_horodatage()} · 96 ADMET {resultat.ecart.identifiant} au PLAFOND "
+        f"auto-mandat ({plafond_cycle}/cycle) → file à-valider {tache['id']} "
+        f"(rien de perdu, plan actif borné)"
+    )
+    return "a_valider"
+
+
+def detecter_et_filtrer(etat: dict, filtre: FiltreAdmission,
+                        plafond_cycle: int = PLAFOND_AUTOMANDAT_CYCLE,
+                        ecarts=None) -> None:
     """
     96 « voit pour agir » : il détecte des écarts et les passe au filtre
-    d'admission. Un écart ADMIS qui est une CRÉATION devient une nouvelle tâche
-    AUTO-MANDATÉE (la boucle se donne du travail à elle-même) ; les autres sont
-    archivés sans alerter 95.
+    d'admission. Un écart ADMIS qui est une CRÉATION devient une tâche
+    AUTO-MANDATÉE — mais BORNÉE : jusqu'à `plafond_cycle` créations entrent au
+    plan actif par cycle ; le surplus va en FILE À-VALIDER (rien de perdu, plan
+    actif borné). Les autres écarts sont archivés sans alerter 95.
 
-    Les écarts sont pré-définis (déterministes) : ceci est une amorce, pas un
-    vrai détecteur. Le garde-fou `ecarts_semes` empêche tout emballement.
+    Les écarts par défaut sont pré-définis (déterministes) : ceci est une amorce,
+    pas un vrai détecteur. Le garde-fou `ecarts_semes` empêche tout re-semis ; le
+    paramètre `ecarts` permet aux tests d'injecter un lot pour exercer le budget.
     """
     if etat.get("ecarts_semes"):
         return  # déjà fait à un cycle précédent → on ne resème pas
 
-    ecarts = [
-        # Écart CENTRAL : forte criticité/impact → doit être retenu.
-        Ecart("e-central", criticite=9, frequence_usage=8, persistance=7,
-              impact_utilisateur=9, cout=2, creation=True,
-              libelle="Corriger une dérive structurelle détectée"),
-        # Écart PÉRIPHÉRIQUE : faible → doit être archivé sans alerter 95.
-        Ecart("e-peripherique", criticite=2, frequence_usage=1, persistance=1,
-              impact_utilisateur=2, cout=5, creation=True,
-              libelle="Ajuster un détail cosmétique mineur"),
-    ]
+    if ecarts is None:
+        ecarts = [
+            # Écart CENTRAL : forte criticité/impact → doit être retenu.
+            Ecart("e-central", criticite=9, frequence_usage=8, persistance=7,
+                  impact_utilisateur=9, cout=2, creation=True,
+                  libelle="Corriger une dérive structurelle détectée"),
+            # Écart PÉRIPHÉRIQUE : faible → doit être archivé sans alerter 95.
+            Ecart("e-peripherique", criticite=2, frequence_usage=1, persistance=1,
+                  impact_utilisateur=2, cout=5, creation=True,
+                  libelle="Ajuster un détail cosmétique mineur"),
+        ]
     taille_file = sum(1 for t in etat["taches"] if t["etat"] == "a_faire")
 
     for resultat in (filtre.evaluer(e, taille_file) for e in ecarts):
         etat["archive_96"].append(resultat.en_dict())
         if resultat.decision is Decision.ADMIS and resultat.ecart.creation:
-            # Auto-mandat : 96 fait inscrire une nouvelle tâche au plan de 95.
-            nouvel_id = f"t{len(etat['taches']) + 1}"
-            etat["taches"].append(
-                {
-                    "id": nouvel_id,
-                    "libelle": f"[auto-mandat 96] {resultat.ecart.libelle}",
-                    "etat": "a_faire",
-                    "resultat": None,
-                    "verifie": False,
-                    "veto": False,
-                    "sensible": False,
-                }
-            )
-            etat["journal"].append(
-                f"{_horodatage()} · 96 ADMET {resultat.ecart.identifiant} "
-                f"(priorité {resultat.priorite:.1f} ≥ seuil {resultat.seuil_effectif:.1f}) "
-                f"→ nouvelle tâche {nouvel_id}"
-            )
+            inscrire_creation(etat, resultat, plafond_cycle)
         else:
             etat["journal"].append(
                 f"{_horodatage()} · 96 archive {resultat.ecart.identifiant} "
@@ -359,10 +403,17 @@ def tourner(chemin_etat: Path, pas: int | None = None,
         moteur = MoteurMock()
     etat = planifier(chemin_etat)        # 95 : (re)charge le plan
     etat["cycle"] += 1
+    # Budget d'auto-mandat PAR CYCLE : le compteur du cycle repart à zéro.
+    etat["auto_mandat_cycle"] = 0
+    etat.setdefault("a_valider", [])
+    etat.setdefault("a_valider_historique", [])
 
     # 96 amorce d'éventuelles tâches auto-mandatées (dans la limite du budget).
     filtre = FiltreAdmission(seuil_base=50, capacite_file=10, budget_generation=1)
     detecter_et_filtrer(etat, filtre)
+    # Profondeur de la file à-valider capturée par cycle : 98 y lit la TENDANCE
+    # (croissance monotone sur k cycles = signal), sans piloter la boucle.
+    etat["a_valider_historique"].append(len(etat["a_valider"]))
     sauver_etat(chemin_etat, etat)
 
     traitees = 0

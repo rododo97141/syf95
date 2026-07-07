@@ -38,11 +38,13 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 if SCRIPT_DIR not in sys.path:
     sys.path.insert(0, SCRIPT_DIR)
 import nexus_orchestrateur  # routage par force vivante (brique 4)
+import nexus_budget          # budget d'échanges par vie du fil (le couteau)
 
 PREFIXE_ROLE = "role:"
 
 
-def router(bus, adaptateurs, offset=0, forces=None, exploration=None):
+def router(bus, adaptateurs, offset=0, forces=None, exploration=None,
+           budget=None):
     """UNE passe de routage non bloquante.
 
     bus         : module/objet exposant lire_depuis(offset) et publier(msg)
@@ -52,7 +54,16 @@ def router(bus, adaptateurs, offset=0, forces=None, exploration=None):
     forces      : (brique 4) dict {agent: force} pour le mode "role:", ou None
                   → chargé en LECTURE SEULE depuis forces.json au 1er besoin ;
     exploration : (brique 4) politique d'exploration ε (CompteurExploration) ou
-                  None → une politique fraîche est créée au 1er besoin.
+                  None → une politique fraîche est créée au 1er besoin ;
+    budget      : budget d'échanges par VIE du fil (nexus_budget.BudgetFils) ou
+                  None → un budget frais est créé pour cette passe. Comme pour
+                  `exploration`, un appelant qui veut BORNER une conversation à
+                  travers plusieurs passes/cycles fournit LE SIEN (persistant) :
+                  c'est ce qui rend le budget « par vie » et non « par passe ».
+                  Au plafond du fil (ou sur stagnation), le message n'est plus
+                  remis et un capteur de coupure NEUTRE est journalisé ; SOUS le
+                  budget, le routage (nommé/étoile/rôle) reste STRICTEMENT
+                  byte-identique.
 
     Renvoie (reponses_publiees, nouvel_offset) — repasser nouvel_offset à
     l'appel suivant pour ne router que le neuf (tail-since-offset)."""
@@ -61,7 +72,13 @@ def router(bus, adaptateurs, offset=0, forces=None, exploration=None):
     reponses = []
     _forces = forces            # résolus PARESSEUSEMENT, seulement si "role:"
     _exploration = exploration  # apparaît (passes nommé/étoile inchangées)
+    _budget = budget if budget is not None else nexus_budget.BudgetFils()
     for msg in messages:
+        # Le couteau, à la FRONTIÈRE du message (avant toute remise) : au
+        # plafond du fil, on ne remet plus (coupure journalisée). Sous le
+        # budget, la suite est inchangée — byte-identique.
+        if not _budget.admettre(msg).admis:
+            continue
         destinataire = msg.get("destinataire")
         msg_livre = msg  # par défaut : verbatim (nommé/étoile inchangés)
         if destinataire == "*":  # broadcast : tous sauf l'expéditeur
