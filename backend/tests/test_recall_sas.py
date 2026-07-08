@@ -359,8 +359,10 @@ def _remonter_corpus_golden(m):
 def test_T6_enumeration_des_appelants_de_recall():
     """Rougit si un NOUVEL appelant de rec()/`/recall` apparaît sans décision.
     Chaque appelant connu est protégé par le DÉFAUT byte-identique (aucun ne
-    passe format=sas). nexus_capital.consulter est ABSENT à dessein : il scanne
-    STRUCT directement (fiches nées structurelles), il ne passe pas par recall."""
+    passe format=sas). DÉCISION (autonomie HITL, étape visibilité) : le rappel de
+    la BOUCLE passe désormais par nexus_capital.consulter(memoire=...) qui délègue
+    à recall (rappel INCHANGÉ, scope=all, results[0]) pour rendre la consultation
+    VISIBLE au bilan ; l'orchestrateur n'appelle donc plus recall EN DIRECT."""
     import re
     pat = re.compile(r"\.recall\(|/recall")
     trouves = set()
@@ -381,7 +383,8 @@ def test_T6_enumeration_des_appelants_de_recall():
 
     connus = {
         # --- appels réels (tous en scope par défaut, protégés byte-identique) ---
-        "backend/orchestrateur.py",                      # recall scope=all (top-1)
+        "organes/nexus_capital.py",                      # consulter(memoire) → recall scope=all (top-1),
+                                                         # rappel INCHANGÉ de la boucle, rendu VISIBLE
         "organes/agentos_adaptateurs.py",                # recall scope injecté
         "organes/nexus_98.py",                           # /recall?domain=&category= (structure)
         ".claude/skills/expert-98/scripts/nexus_98.py",  # idem (miroir skill)

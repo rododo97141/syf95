@@ -157,13 +157,20 @@ def _memoire_api_defaut():
         return None
 
 
-def _rappeler_fiche(libelle: str, memoire) -> dict | None:
-    """Consulte le recall (déjà classé pertinence(IDF) × force) sur le libellé
-    de la tâche et renvoie la meilleure fiche trouvée, ou None. Ne lève jamais."""
+def _rappeler_fiche(tache: dict, memoire) -> dict | None:
+    """Consulte le recall VIA nexus_capital.consulter (rappel INCHANGÉ : consulter
+    délègue à recall, results[0], une fiche par tâche) — la consultation est ainsi
+    JOURNALISÉE et devient VISIBLE au bilan HITL (fin des consultations invisibles).
+
+    Patron NE-CASSE-JAMAIS-LA-BOUCLE : consulter qui lève (recall cassé, capital
+    indisponible) → renvoie None, la boucle continue TOUJOURS.
+
+    Renvoie l'enregistrement de consultation (avec `id` et le champ transient
+    `_fiche` porteur de l'excerpt pour l'injection), ou None."""
     try:
-        reponse = memoire.recall({"query": [libelle], "scope": ["all"]})
-        resultats = reponse.get("results") or []
-        return resultats[0] if resultats else None
+        import nexus_capital
+        return nexus_capital.consulter(tache["libelle"], tache["libelle"],
+                                       memoire=memoire)
     except Exception:
         return None
 
@@ -175,29 +182,37 @@ def executer_tache(tache: dict, moteur: Moteur, memoire=None) -> dict:
     (Claude/Gemini/GPT/Kimi) en production — sans rien changer ici.
 
     La MÉMOIRE est interchangeable elle aussi (même logique d'injection que le
-    Moteur) : avant l'appel, on consulte le recall (mémoire-beta) sur le
-    libellé de la tâche et on injecte la meilleure fiche trouvée dans le
-    prompt. `memoire=None` (défaut) importe paresseusement la vraie mémoire ;
-    les tests injectent une instance isolée.
+    Moteur) : avant l'appel, on consulte le recall (mémoire-beta) sur le libellé
+    de la tâche VIA nexus_capital.consulter (qui JOURNALISE la consultation) et on
+    injecte la meilleure fiche trouvée dans le prompt. `memoire=None` (défaut)
+    importe paresseusement la vraie mémoire ; les tests injectent une instance
+    isolée. La consultation ouverte est portée dans `resultat["consultation_id"]`
+    pour que l'observer la CLÔTURE (administrativement) en fin de tâche.
     """
     if memoire is None:
         memoire = _memoire_api_defaut()
 
     prompt = f"Réalise la tâche NEXUS suivante : {tache['libelle']}"
     fiche_slug = None
+    consultation_id = None
     if memoire is not None:
-        fiche = _rappeler_fiche(tache["libelle"], memoire)
-        if fiche is not None:
-            nom = fiche.get("file", "")
-            fiche_slug = nom[:-3] if nom.endswith(".md") else nom
-            prompt += (
-                f"\n\n[Mémoire rappelée : {fiche_slug}]\n{fiche.get('excerpt', '')}"
-            )
+        rec = _rappeler_fiche(tache, memoire)
+        if rec is not None:
+            consultation_id = rec.get("id")
+            slugs = rec.get("slugs_retournes") or []
+            if slugs:
+                fiche_slug = slugs[0]
+                payload = rec.get("_fiche") or {}
+                prompt += (
+                    f"\n\n[Mémoire rappelée : {fiche_slug}]\n{payload.get('excerpt', '')}"
+                )
 
     sortie = moteur.generer(prompt)
     resultat = {"sortie": f"[97] {sortie}", "ok": True}
     if fiche_slug:
         resultat["fiche"] = fiche_slug
+    if consultation_id:
+        resultat["consultation_id"] = consultation_id   # à clôturer par l'observer
     return resultat
 
 
@@ -336,49 +351,18 @@ def _capter_tache(tache: dict, tier: str) -> None:
         return
 
 
-def _capter_usage_fiche(tache: dict, fiche_slug: str, statut: str, tier: str) -> None:
-    """Capture DÉDIÉE : quand une fiche rappelée (recall) a servi à une tâche,
-    un capteur distinct trace laquelle et si elle a aidé (succes) ou non
-    (echec) — c'est la matière brute du pont vers forces.json (brique 3).
-    Import paresseux, jamais bloquant (même garde-fou que `_capter_tache`)."""
-    try:
-        import os
-        import sys
-        _org = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "organes"
-        )
-        if _org not in sys.path:
-            sys.path.insert(0, _org)
-        import nexus_sense
-        nexus_sense.log_event(
-            tache=tache["libelle"],
-            statut=statut,
-            mode="auto",
-            difficulte="moyen",
-            tier=tier,
-            fiche=fiche_slug,
-            feedback=None,
-            impact=None,
-        )
-    except Exception:
+def _observer_cloture(consultation_id) -> None:
+    """Clôture ADMINISTRATIVE de la consultation de boucle via l'observer
+    (clore_sans_dette, raison boucle-sans-verdict-humain) : jamais de JUGEMENT,
+    jamais de capteur de force. L'observer est lui-même DÉFENSIF-TRAÇANT ; on
+    ajoute ici une garde d'import pour que même son indisponibilité ne casse
+    JAMAIS la boucle. La boucle ne se récompense jamais elle-même : elle rend ses
+    consultations visibles PUIS les clôt administrativement, sans toucher la force."""
+    if not consultation_id:
         return
-
-
-def _appliquer_forces() -> None:
-    """Pont capteurs → forces.json (brique 3) : recalcule et écrit les
-    multiplicateurs de force à partir des capteurs `fiche=...` accumulés.
-    N'est appelé que si au moins une fiche a servi durant ce passage (jamais
-    d'écriture superflue). Ne lève jamais (protège la boucle)."""
     try:
-        import os
-        import sys
-        _org = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "organes"
-        )
-        if _org not in sys.path:
-            sys.path.insert(0, _org)
-        import nexus_force
-        nexus_force.appliquer()
+        import nexus_observer
+        nexus_observer.cloturer_consultation_boucle(consultation_id)
     except Exception:
         return
 
@@ -417,7 +401,6 @@ def tourner(chemin_etat: Path, pas: int | None = None,
     sauver_etat(chemin_etat, etat)
 
     traitees = 0
-    fiches_utilisees = False
     for index, tache in enumerate(etat["taches"]):
         if tache["etat"] != "a_faire":
             continue  # déjà faite ou bloquée → on saute (c'est la reprise)
@@ -453,17 +436,13 @@ def tourner(chemin_etat: Path, pas: int | None = None,
         )
         # Capture simple : un capteur par tâche (mémoire vivante via nexus_sense).
         _capter_tache(tache, reco["tier"])
-        # Une fiche rappelée a servi : capteur dédié (fiche=slug, succes|echec).
-        if resultat.get("fiche"):
-            statut_fiche = "succes" if tache["etat"] == "fait" else "echec"
-            _capter_usage_fiche(tache, resultat["fiche"], statut_fiche, reco["tier"])
-            fiches_utilisees = True
+        # CLÔTURE de la consultation de boucle par l'observer : administrative
+        # (clore_sans_dette), JAMAIS de jugement, JAMAIS de capteur de force. La
+        # boucle rend ses consultations VISIBLES au bilan puis les clôt — elle ne
+        # se récompense jamais elle-même (la force reste un jugement humain).
+        _observer_cloture(resultat.get("consultation_id"))
         sauver_etat(chemin_etat, etat)  # ← persistance APRÈS CHAQUE tâche
         traitees += 1
-
-    if fiches_utilisees:
-        # Pont capteurs → forces.json : la force devient vivante (brique 3).
-        _appliquer_forces()
 
     sauver_etat(chemin_etat, etat)
     return etat

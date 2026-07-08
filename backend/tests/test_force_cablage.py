@@ -1,14 +1,22 @@
-"""Intégration bout-en-bout du câblage mémoire DANS la boucle (feat/force-cablage).
+"""Câblage mémoire DANS la boucle — RÉVISÉ par la doctrine « la force reste un
+jugement humain externe » (autonomie du déclencheur HITL, étape 1 : la visibilité).
 
-Vérifie les trois briques ensemble, sur un état/mémoire/capteurs isolés
-(jamais le vrai memoire_data/) :
+Historiquement (feat/force-cablage) la boucle ÉMETTAIT elle-même des capteurs de
+force (fiche=<slug>, statut=succes|echec) et faisait MONTER forces.json : c'était
+un chemin MÉCANIQUE qui se récompensait lui-même (Goodhart interne). La nouvelle
+doctrine l'INTERDIT : la boucle rend ses rappels VISIBLES (consultations
+journalisées via nexus_capital.consulter) puis les CLÔT administrativement
+(observer → clore_sans_dette), sans JAMAIS émettre de force. Seul appliquer,
+adossé à un jeton HUMAIN, fait bouger la force.
 
-  1) recall consulté AVANT l'appel moteur dans executer_tache/tourner, et la
-     meilleure fiche trouvée injectée dans le prompt ;
-  2) quand une fiche a servi, un capteur dédié est émis via nexus_sense.log_event
-     avec fiche=<slug> et statut=succes|echec ;
-  3) le pont capteurs → forces.json fait vraiment monter la force d'une fiche
-     réutilisée avec succès (recompute déterministe, additif).
+Ce fichier vérifie donc, sur état/mémoire/capteurs isolés (jamais le vrai
+memoire_data/) :
+
+  1) le RAPPEL est INCHANGÉ : recall consulté avant l'appel moteur dans
+     executer_tache, meilleure fiche injectée dans le prompt (excerpt compris) ;
+  2) la boucle N'ÉMET AUCUN capteur de force (aucun event fiche+succes|echec) ;
+  3) la boucle N'ÉCRIT PAS forces.json — elle ne se récompense jamais elle-même ;
+  4) sans fiche rappelée : ni forces.json, ni consultation (rien de fantôme).
 """
 import os
 import sys
@@ -78,8 +86,15 @@ def _setup(tmp_path, monkeypatch):
     return mem, racine_memoire
 
 
+def _capteurs():
+    journal = os.path.join(os.environ["CAPTEURS_ROOT"], "capteurs", "journal.jsonl")
+    if not os.path.exists(journal):
+        return []
+    return [json.loads(l) for l in open(journal, encoding="utf-8") if l.strip()]
+
+
 # --------------------------------------------------------------------------- #
-# 1) recall consulté + fiche injectée dans le prompt
+# 1) RAPPEL INCHANGÉ : recall consulté + fiche injectée dans le prompt (excerpt).
 # --------------------------------------------------------------------------- #
 def test_executer_tache_consulte_le_recall_et_injecte_la_fiche(tmp_path, monkeypatch):
     mem, _racine = _setup(tmp_path, monkeypatch)
@@ -97,7 +112,9 @@ def test_executer_tache_consulte_le_recall_et_injecte_la_fiche(tmp_path, monkeyp
     assert resultat["fiche"] == "zorglubide"
     assert len(moteur.appels) == 1
     assert "[Mémoire rappelée : zorglubide]" in moteur.appels[0]
-    assert "Procédure zorglubide" in moteur.appels[0]
+    assert "Procédure zorglubide" in moteur.appels[0]          # excerpt injecté (inchangé)
+    # la consultation est ouverte et VISIBLE (portée pour clôture par l'observer).
+    assert resultat.get("consultation_id")
 
 
 def test_executer_tache_sans_fiche_correspondante_ne_pollue_pas_le_prompt(tmp_path, monkeypatch):
@@ -112,13 +129,14 @@ def test_executer_tache_sans_fiche_correspondante_ne_pollue_pas_le_prompt(tmp_pa
     resultat = orchestrateur.executer_tache(tache, moteur, memoire=mem)
 
     assert "fiche" not in resultat
+    assert "consultation_id" not in resultat                   # pas de consultation fantôme
     assert "[Mémoire rappelée" not in moteur.appels[0]
 
 
 # --------------------------------------------------------------------------- #
-# 2) capteur dédié (fiche=slug, statut=succes|echec) émis quand une fiche a servi
+# 2) DOCTRINE : la boucle N'ÉMET AUCUN capteur de force (fiche+succes|echec).
 # --------------------------------------------------------------------------- #
-def test_capteur_fiche_emis_avec_statut_succes(tmp_path, monkeypatch):
+def test_la_boucle_n_emet_aucun_capteur_de_force(tmp_path, monkeypatch):
     mem, _racine = _setup(tmp_path, monkeypatch)
     _fiche(mem, "dom", "cat", "zorglubide", "Procédure zorglubide.")
 
@@ -128,20 +146,22 @@ def test_capteur_fiche_emis_avec_statut_succes(tmp_path, monkeypatch):
     from moteur import MoteurMock
     orchestrateur.tourner(etat_path, moteur=MoteurMock(), memoire=mem)
 
-    racine_cap = os.environ["CAPTEURS_ROOT"]  # isolé par le conftest autouse
-    journal = os.path.join(racine_cap, "capteurs", "journal.jsonl")
-    lignes = [json.loads(l) for l in open(journal, encoding="utf-8") if l.strip()]
+    # AUCUN event de force issu de la boucle : la force est un jugement HUMAIN.
+    forces = [e for e in _capteurs()
+              if e.get("fiche") and e.get("statut") in ("succes", "echec")]
+    assert forces == [], "la boucle ne doit émettre AUCUN capteur de force"
 
-    capteurs_fiche = [e for e in lignes if e.get("fiche")]
-    assert len(capteurs_fiche) == 1
-    assert capteurs_fiche[0]["fiche"] == "zorglubide"
-    assert capteurs_fiche[0]["statut"] == "succes"
+    # La consultation de boucle a bien été CLÔTURÉE (administrativement) : aucune
+    # consultation de boucle ouverte au bilan, aucune dette.
+    import nexus_capital
+    b = nexus_capital.bilan()
+    assert b["n_ouvertes"] == 0 and b["n_dette"] == 0
 
 
 # --------------------------------------------------------------------------- #
-# 3) le pont capteurs → forces.json fait monter la force d'une fiche réutilisée
+# 3) DOCTRINE : la boucle N'ÉCRIT PAS forces.json (aucune auto-récompense).
 # --------------------------------------------------------------------------- #
-def test_une_tache_qui_reutilise_une_fiche_fait_monter_sa_force(tmp_path, monkeypatch):
+def test_la_boucle_n_ecrit_pas_forces_json(tmp_path, monkeypatch):
     mem, racine_memoire = _setup(tmp_path, monkeypatch)
     _fiche(mem, "dom", "cat", "zorglubide", "Procédure zorglubide.")
 
@@ -153,26 +173,17 @@ def test_une_tache_qui_reutilise_une_fiche_fait_monter_sa_force(tmp_path, monkey
     )
 
     from moteur import MoteurMock
+    orchestrateur.tourner(etat_path, moteur=MoteurMock(), memoire=mem)
+
+    # La fiche a servi DEUX fois — pourtant forces.json n'existe pas : seul un
+    # jeton humain (appliquer) écrirait de la force, jamais la boucle.
     chemin_forces = os.path.join(str(racine_memoire), "forces.json")
-
-    # Passage 1 : une seule tâche traitée (pas=1) → la fiche sert une 1re fois.
-    orchestrateur.tourner(etat_path, pas=1, moteur=MoteurMock(), memoire=mem)
-    forces_1 = json.loads(open(chemin_forces, encoding="utf-8").read())
-    assert forces_1["zorglubide"] > 1.0
-    force_apres_1 = forces_1["zorglubide"]
-
-    # Passage 2 (reprise) : la 2e tâche réutilise la MÊME fiche → la force remonte encore.
-    orchestrateur.tourner(etat_path, pas=1, moteur=MoteurMock(), memoire=mem)
-    forces_2 = json.loads(open(chemin_forces, encoding="utf-8").read())
-    assert forces_2["zorglubide"] > force_apres_1
-
-    # Et cette force plus élevée est bien celle que recall() applique (contrat forces.json).
-    forces_lues = mem.load_forces()
-    assert forces_lues["zorglubide"] == forces_2["zorglubide"]
+    assert not os.path.exists(chemin_forces)
 
 
-def test_pas_de_fiche_pas_decriture_de_forces_json(tmp_path, monkeypatch):
-    """Garde-fou : si aucune fiche n'a servi, aucune écriture forces.json (pas de bruit)."""
+def test_pas_de_fiche_pas_de_forces_ni_de_consultation(tmp_path, monkeypatch):
+    """Sans fiche rappelée : aucune écriture forces.json ET aucune consultation
+    fantôme (ni bruit de force, ni fausse dette au bilan)."""
     mem, racine_memoire = _setup(tmp_path, monkeypatch)
     # Pas de fiche en structure : recall ne trouvera rien.
     etat_path = tmp_path / "etat.json"
@@ -183,3 +194,7 @@ def test_pas_de_fiche_pas_decriture_de_forces_json(tmp_path, monkeypatch):
 
     chemin_forces = os.path.join(str(racine_memoire), "forces.json")
     assert not os.path.exists(chemin_forces)
+
+    import nexus_capital
+    b = nexus_capital.bilan()
+    assert b["n_actionnables"] == 0        # aucune consultation ouverte/close/dette

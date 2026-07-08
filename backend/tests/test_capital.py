@@ -233,7 +233,8 @@ def test_t3_appliquer_capteur_statut_verifie_transfert_et_refus_multi(cap):
     rec = cap.cap.consulter("tokenunique", "tâche T3")
     assert rec["slugs_retournes"] == [slug]                   # fiche-unique
 
-    app = cap.cap.appliquer(rec["id"], slug, "succes", "tâche T3")
+    jid = cap.cap.generer_jeton_confirmation(rec["id"])       # LE geste humain (jeton)
+    app = cap.cap.appliquer(rec["id"], slug, "succes", "tâche T3", jeton=jid)
 
     # --- capteur bien formé : fiche=slug, statut ∈ {succes, echec} ---
     caps = [e for e in _capteurs(cap) if e.get("fiche")]
@@ -252,18 +253,23 @@ def test_t3_appliquer_capteur_statut_verifie_transfert_et_refus_multi(cap):
     tr = [json.loads(l) for l in open(cap.lecons.TRANSFERT, encoding="utf-8") if l.strip()]
     assert tr[-1]["lecon_cle"] == slug and tr[-1]["tache_nouvelle"] == "tâche T3"
 
-    # --- 'ok'/'partiel' REJETÉS (ne bougent pas la force → capteur inerte interdit) ---
+    # --- 'ok'/'partiel' REJETÉS (ne bougent pas la force → capteur inerte interdit).
+    #     Jeton VALIDE fourni : le REFUS vient bien du statut, pas du verrou jeton. ---
     rec_ok = cap.cap.consulter("tokenunique", "tâche T3 bis")
+    jok = cap.cap.generer_jeton_confirmation(rec_ok["id"])
     with pytest.raises(ValueError):
-        cap.cap.appliquer(rec_ok["id"], slug, "ok", "tâche T3 bis")
+        cap.cap.appliquer(rec_ok["id"], slug, "ok", "tâche T3 bis", jeton=jok)
 
-    # --- REFUS si multi-fiches : aucun capteur de force émis ---
+    # --- REFUS si multi-fiches : aucun capteur de force émis. Jeton VALIDE fourni :
+    #     le REFUS vient du multi-fiches, pas du verrou jeton. ---
     cap.cap.capitaliser("Critères tokenunique beta redondant", "r", "ctx", "nexus")
     multi = cap.cap.consulter("tokenunique", "tâche multi")   # matche les 2 fiches
     assert len(multi["slugs_retournes"]) >= 2
+    jmulti = cap.cap.generer_jeton_confirmation(multi["id"])
     n_avant = len([e for e in _capteurs(cap) if e.get("fiche")])
     with pytest.raises(ValueError):
-        cap.cap.appliquer(multi["id"], multi["slugs_retournes"][0], "succes", "tâche multi")
+        cap.cap.appliquer(multi["id"], multi["slugs_retournes"][0], "succes",
+                          "tâche multi", jeton=jmulti)
     assert len([e for e in _capteurs(cap) if e.get("fiche")]) == n_avant   # rien émis
 
 
@@ -278,7 +284,8 @@ def _appliquer_n(cap, question, token, statut, n):
     for _ in range(n):
         rec = cap.cap.consulter(token, "boucle")
         assert rec["slugs_retournes"] == [slug], rec["slugs_retournes"]
-        cap.cap.appliquer(rec["id"], slug, statut, "boucle")
+        jid = cap.cap.generer_jeton_confirmation(rec["id"])   # un jeton par application
+        cap.cap.appliquer(rec["id"], slug, statut, "boucle", jeton=jid)
     return slug
 
 
@@ -322,7 +329,8 @@ def test_successeur_a_forces_distinctes_discriminent_le_classement(cap):
     for _ in range(3):                             # chaîne réelle : 3 succès sur la boostée
         rec = cap.cap.consulter("zzzboostee", "boucle")
         assert rec["slugs_retournes"] == [boostee]
-        cap.cap.appliquer(rec["id"], boostee, "succes", "boucle")
+        jid = cap.cap.generer_jeton_confirmation(rec["id"])
+        cap.cap.appliquer(rec["id"], boostee, "succes", "boucle", jeton=jid)
 
     forces = cap.nf.calculer_forces()
     assert forces.get(boostee, 1.0) > forces.get(temoin, 1.0)   # forces DISTINCTES
@@ -354,11 +362,13 @@ def test_successeur_b_force_bornee_non_dominante_au_vrai_plafond(cap):
     for _ in range(20):
         rec = cap.cap.consulter("maxtoken", "b")
         assert rec["slugs_retournes"] == [sat_max]
-        cap.cap.appliquer(rec["id"], sat_max, "succes", "b")
+        jid = cap.cap.generer_jeton_confirmation(rec["id"])
+        cap.cap.appliquer(rec["id"], sat_max, "succes", "b", jeton=jid)
     for _ in range(8):
         rec = cap.cap.consulter("mintoken", "b")
         assert rec["slugs_retournes"] == [sat_min]
-        cap.cap.appliquer(rec["id"], sat_min, "echec", "b")
+        jid = cap.cap.generer_jeton_confirmation(rec["id"])
+        cap.cap.appliquer(rec["id"], sat_min, "echec", "b", jeton=jid)
 
     forces = cap.nf.calculer_forces()
     assert forces[sat_max] == cap.nf.FORCE_MAX     # vrai plafond, atteint par la chaîne
@@ -390,7 +400,8 @@ def test_t6_bilan_dette_et_verdict_98(cap, monkeypatch):
     # fiche-unique APPLIQUÉE.
     appl = cap.cap.capitaliser("Critères applibeta bien utilisée", "r", "ctx", "nexus")
     r_appl = cap.cap.consulter("applibeta", "t-appl")
-    cap.cap.appliquer(r_appl["id"], appl, "succes", "t-appl")
+    j_appl = cap.cap.generer_jeton_confirmation(r_appl["id"])
+    cap.cap.appliquer(r_appl["id"], appl, "succes", "t-appl", jeton=j_appl)
 
     # fiche-unique CLOSE-SANS-DETTE.
     close = cap.cap.capitaliser("Critères closegamma sans critère finalement", "r", "ctx", "nexus")
@@ -467,7 +478,8 @@ def test_t7_empreintes_inchangees_hors_fichiers_propres(cap):
     # chaîne complète : capitaliser → consulter → appliquer → clore → bilan.
     slug = cap.cap.capitaliser("Critères empreinte à mesurer", "r", "ctx", "nexus")
     rec = cap.cap.consulter("empreinte", "t7")
-    cap.cap.appliquer(rec["id"], slug, "succes", "t7")
+    jid = cap.cap.generer_jeton_confirmation(rec["id"])
+    cap.cap.appliquer(rec["id"], slug, "succes", "t7", jeton=jid)
     rec2 = cap.cap.capitaliser("Critères deuxieme empreinte", "r", "ctx", "nexus")
     m = cap.cap.consulter("empreinte", "t7")          # matche 2 → multi
     cap.cap.clore_sans_dette(m["id"], "multi-fiches")

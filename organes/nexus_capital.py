@@ -21,18 +21,30 @@ Le chantier CÂBLE des organes existants, il ne les reconstruit pas :
 nexus_capital est le SEUL écrivain de SES fichiers :
   - fiches      : <MEMOIRE_ROOT>/structure/<domaine>/criteres-kily/<slug>.md
   - journal     : <MEMOIRE_ROOT>/capital/consultations.jsonl (append-only)
+  - registre    : <MEMOIRE_ROOT>/capital/jetons.jsonl (append-only) — écrit UNIQUEMENT
+                  par generer_jeton_confirmation (LE geste humain).
 Il n'écrit JAMAIS memory_api.py, nexus_force.py, nexus_sense.py, nexus_lecons.py :
   les capteurs et le journal des leçons sont écrits VIA ces organes (un écrivain
   par fichier). L'emplacement des fiches est celui que rank()/memory_api lisent
   RÉELLEMENT par défaut (MEMOIRE_ROOT/structure) — décision vérifiée, cf. la PR :
   `memoire/` à la racine (committé) n'est lu par aucun code runtime.
 
-Les cinq gestes :
+LIGNE ROUGE DE DOCTRINE (non négociable) : aucun chemin MÉCANIQUE ne peut atteindre
+appliquer — le système ne se récompense JAMAIS lui-même (modèle de menace :
+le-code-s-auto-récompense / Goodhart interne). La force reste un signal de JUGEMENT
+HUMAIN externe : appliquer exige un jeton de confirmation VALIDE et NON CONSOMMÉ,
+matérialisé par generer_jeton_confirmation (le seul geste humain). Dissymétrie nette :
+clore_sans_dette (clôture administrative) n'exige RIEN ; appliquer (jugement) est verrouillé.
+
+Les gestes :
   1) capitaliser(question, reponse, contexte, domaine)  -> écrit la fiche + pointeur leçon
-  2) consulter(query, tache)                            -> délègue à rank(), journalise
-  3) appliquer(consultation_id, fiche_retenue, resultat, tache) -> clôture + capteur de force
-  4) clore_sans_dette(consultation_id, raison)          -> clôture SANS capteur de force
-  5) bilan()                                            -> dette de consultations non closes
+  2) consulter(query, tache, memoire=None)              -> délègue à rank() ; avec `memoire`,
+                                                           délègue le rappel à recall (chemin boucle)
+  3) generer_jeton_confirmation(consultation_id)        -> LE geste humain : émet un jeton usage-unique
+  4) appliquer(consultation_id, fiche_retenue, resultat, tache, jeton) -> clôture + capteur de force
+                                                           (EXIGE un jeton valide non consommé, l'inscrit)
+  5) clore_sans_dette(consultation_id, raison)          -> clôture SANS capteur de force (rien exigé)
+  6) bilan()                                            -> dette de consultations non closes
 
 Usage bibliothèque uniquement (pas de CLI serveur ici).
 """
@@ -93,6 +105,10 @@ def _chemin_fiche(domaine, slug):
 
 def _chemin_consultations():
     return os.path.join(_racine(), "capital", "consultations.jsonl")
+
+
+def _chemin_jetons():
+    return os.path.join(_racine(), "capital", "jetons.jsonl")
 
 
 # =========================================================================== #
@@ -191,16 +207,52 @@ def capitaliser(question, reponse, contexte, domaine, pourquoi=None):
 # 2) consulter — délègue le CLASSEMENT à nexus_force.rank() (aucune logique de
 #    tri nouvelle ici), journalise la consultation (fiche_retenue=null provisoire).
 # =========================================================================== #
-def consulter(query, tache, k=3):
+def consulter(query, tache, k=3, memoire=None):
     """Cherche les critères capitalisés pertinents pour `query` et journalise la
-    consultation. Le tri est INTÉGRALEMENT délégué à nexus_force.rank() — cet
-    organe ne calcule aucun score. Renvoie l'enregistrement de consultation
-    (dont `id` et `slugs_retournes`).
+    consultation. Renvoie l'enregistrement de consultation (dont `id` et
+    `slugs_retournes`).
 
-    `slugs_retournes` = slugs (radicaux .md) des candidats à pertinence non nulle,
-    plafonnés aux `k` premiers. Une consultation fiche-UNIQUE (len==1) est la
-    seule qui pourra émettre un capteur de force (cf. appliquer)."""
+    DEUX chemins, choisis par `memoire` :
+
+      • `memoire=None` (défaut, chemin CAPITAL) : le tri est INTÉGRALEMENT délégué
+        à nexus_force.rank() sur les fiches criteres-kily — cet organe ne calcule
+        aucun score. `slugs_retournes` = slugs des candidats à pertinence non nulle,
+        plafonnés aux `k` premiers. COMPORTEMENT HISTORIQUE INCHANGÉ.
+
+      • `memoire` fourni (chemin BOUCLE) : le RAPPEL est DÉLÉGUÉ à `memoire.recall`
+        (portée `all`, results[0] — MIROIR EXACT du rappel historique de la boucle),
+        et la consultation est JOURNALISÉE pour être VISIBLE au bilan. La boucle ne
+        JUGE jamais : elle rend simplement ses consultations comptables. consulter
+        PEUT lever (recall qui casse) ; l'appelant (orchestrateur) avale — la boucle
+        continue TOUJOURS. Sans fiche rappelée : rien n'est journalisé (pas de
+        consultation fantôme au bilan).
+
+    Une consultation fiche-UNIQUE (len==1) est la seule qui pourra émettre un
+    capteur de force (cf. appliquer)."""
     query = query or ""
+    if memoire is not None:
+        # CHEMIN BOUCLE : rappel délégué à recall (inchangé), une fiche par tâche.
+        fiche = _recall_fiche_unique(memoire, query)      # dict result[0] ou None
+        slug = _slug_recall(fiche)                        # slug ou None
+        if slug is None:
+            # aucune fiche : rien à injecter/clôturer/journaliser (id None).
+            return {
+                "type": "consultation", "id": None, "ts": _now(),
+                "requete": query, "slugs_retournes": [],
+                "fiche_retenue": None, "tache": tache, "_fiche": None,
+            }
+        cid = _prochain_id()
+        rec = {
+            "type": "consultation", "id": cid, "ts": _now(),
+            "requete": query, "slugs_retournes": [slug],
+            "fiche_retenue": None, "tache": tache,
+        }
+        _append_consultation(rec)                         # journal LEAN (slug seul)
+        out = dict(rec)
+        out["_fiche"] = fiche      # transient (NON journalisé) : porte l'excerpt
+        return out                 # pour l'injection prompt de l'orchestrateur.
+
+    # CHEMIN CAPITAL (historique) : délégation PURE à rank() sur criteres-kily.
     cands = _candidats()                                  # collecte I/O, PAS du tri
     forces = nexus_force.calculer_forces()                # forces vivantes courantes
     ranked = nexus_force.rank(query, cands, forces=forces)   # DÉLÉGATION pure
@@ -220,15 +272,41 @@ def consulter(query, tache, k=3):
     return rec
 
 
+def _recall_fiche_unique(memoire, query):
+    """Rappel DÉLÉGUÉ à memoire.recall (portée `all`, results[0]) — MIROIR EXACT
+    du _rappeler_fiche historique de l'orchestrateur (rappel INCHANGÉ). Renvoie la
+    meilleure fiche (dict), ou None. NE protège PAS contre une exception de recall :
+    elle remonte à consulter, puis à l'orchestrateur qui l'avale (boucle continue)."""
+    reponse = memoire.recall({"query": [query], "scope": ["all"]})
+    resultats = reponse.get("results") or []
+    return resultats[0] if resultats else None
+
+
+def _slug_recall(fiche):
+    """Slug (radical .md) d'une fiche recall, ou None si absente/sans nom."""
+    if not fiche:
+        return None
+    nom = fiche.get("file", "")
+    slug = nom[:-3] if nom.endswith(".md") else nom
+    return slug or None
+
+
 # =========================================================================== #
 # 3) appliquer — geste de clôture d'une consultation fiche-UNIQUE : fige la fiche
 #    retenue, émet UN capteur de force (statut succes|echec) + un transfert.
 #    REFUSE d'émettre un capteur de force si la consultation était multi-fiches.
 # =========================================================================== #
-def appliquer(consultation_id, fiche_retenue, resultat, tache):
+def appliquer(consultation_id, fiche_retenue, resultat, tache, jeton=None):
     """Clôt une consultation en constatant qu'UNE fiche a servi et a réussi/échoué.
 
-    Garde-fous :
+    VERROU DE JUGEMENT (ligne rouge) : appliquer EXIGE un `jeton` de confirmation
+    HITL VALIDE et NON CONSOMMÉ (émis par generer_jeton_confirmation — le geste
+    humain). C'est la 1re couche de défense : le REGISTRE À L'ÉMISSION. Sans jeton
+    valide, aucun capteur de force n'est émis — le système ne se récompense JAMAIS
+    lui-même. Le jeton est ensuite CONSOMMÉ (marqué utilisé par sa présence dans
+    l'event de force) et son id est INSCRIT dans l'event, dans un champ structuré.
+
+    Garde-fous (sémantique PR 64 INCHANGÉE une fois le jeton validé) :
       - la consultation doit exister et avoir retourné EXACTEMENT une fiche
         (« une fiche constatée ») ; sinon REFUS (multi-fiches → clore_sans_dette).
       - `fiche_retenue` doit être cette unique fiche constatée.
@@ -236,11 +314,32 @@ def appliquer(consultation_id, fiche_retenue, resultat, tache):
         nexus_force.calculer_forces compte (+1 / -1). « ok » / « partiel » sont
         rejetés ici : les émettre laisserait la force PLATE (le bug historique).
 
-    Émet le capteur via nexus_sense.log_event(fiche=<slug>, statut=...), journalise
-    le transfert via nexus_lecons.appliquer, et fige la clôture dans le journal."""
+    Émet le capteur via nexus_sense.log_event(fiche=<slug>, statut=..., jeton=<id>),
+    journalise le transfert via nexus_lecons.appliquer, et fige la clôture dans le
+    journal (l'id du jeton figé avec elle)."""
     cons = _consultation(consultation_id)
     if cons is None:
         raise ValueError("appliquer: consultation inconnue: %r" % consultation_id)
+
+    # --- VERROU DE JUGEMENT : jeton VALIDE et NON CONSOMMÉ, exigé AVANT tout
+    #     capteur de force. Un chemin mécanique (boucle/observer) n'a jamais de
+    #     jeton : il ne peut donc PAS émettre de force. ---
+    if jeton is None:
+        raise ValueError(
+            "appliquer: REFUS — un jeton de confirmation HITL est OBLIGATOIRE "
+            "(generer_jeton_confirmation). Aucun chemin mécanique ne se récompense "
+            "lui-même : la force reste un jugement humain externe.")
+    jrec = _jeton_record(jeton)
+    if jrec is None:
+        raise ValueError("appliquer: jeton %r inconnu du registre." % (jeton,))
+    if jrec.get("consultation_id") != consultation_id:
+        raise ValueError(
+            "appliquer: jeton %r émis pour la consultation %r — ne peut confirmer %r."
+            % (jeton, jrec.get("consultation_id"), consultation_id))
+    if _jeton_deja_reference(jeton):
+        raise ValueError(
+            "appliquer: jeton %r DÉJÀ consommé (rejoué) — usage UNIQUE." % (jeton,))
+
     slugs = cons.get("slugs_retournes") or []
     if len(slugs) != 1:
         raise ValueError(
@@ -254,14 +353,17 @@ def appliquer(consultation_id, fiche_retenue, resultat, tache):
 
     statut = _statut_force(resultat)   # succes|echec, ou lève
 
-    # (b) le capteur : fiche=<slug>, statut compté par calculer_forces. C'est CE
-    #     geste qui rend enfin la force vivante (fin du {} permanent).
+    # (b) le capteur : fiche=<slug>, statut compté par calculer_forces + jeton=<id>
+    #     (champ structuré). C'est CE geste, adossé au jeton humain, qui rend la
+    #     force vivante. Consommer = ce jeton apparaît désormais dans un event de
+    #     force (aucune ré-émission possible : _jeton_deja_reference le verra).
     nexus_sense.log_event(
         tache=tache,
         statut=statut,
         mode="assiste",
         fiche=fiche_retenue,
         note="capital: application d'un critère capitalisé",
+        jeton=jeton,
     )
 
     # transfert : la leçon (référence au slug) réappliquée à une tâche nouvelle.
@@ -281,9 +383,39 @@ def appliquer(consultation_id, fiche_retenue, resultat, tache):
         "statut": statut,
         "tache": tache,
         "capteur_force": True,
+        "jeton": jeton,                   # id du jeton consommé, figé avec la clôture
     }
     _append_consultation(rec)
     return rec
+
+
+# =========================================================================== #
+# 3bis) generer_jeton_confirmation — LE GESTE HUMAIN, seule écrivaine du registre
+#    jetons.jsonl. Un jeton = une confirmation humaine, à usage UNIQUE, adossée à
+#    une consultation existante. Aucun chemin mécanique ne l'appelle (ni appliquer).
+# =========================================================================== #
+def generer_jeton_confirmation(consultation_id):
+    """Émet un jeton de confirmation à USAGE UNIQUE pour `consultation_id` et
+    renvoie son id. SEULE écrivaine du registre jetons.jsonl.
+
+    C'est LE geste humain : sa seule invocation matérialise un jugement humain
+    externe. La consultation doit exister (on ne confirme pas dans le vide). Le
+    jeton reste « non consommé » tant qu'aucun event de force ne le référence
+    (cf. appliquer / _jeton_deja_reference)."""
+    cons = _consultation(consultation_id)
+    if cons is None:
+        raise ValueError(
+            "generer_jeton_confirmation: consultation inconnue: %r"
+            % (consultation_id,))
+    jid = _prochain_jeton_id()
+    rec = {
+        "type": "jeton",
+        "id": jid,
+        "consultation_id": consultation_id,
+        "ts": _now(),
+    }
+    _append_jeton(rec)
+    return jid
 
 
 # =========================================================================== #
@@ -474,6 +606,64 @@ def _append_consultation(rec):
 def _prochain_id():
     n = sum(1 for r in _lire_consultations() if r.get("type") == "consultation")
     return "cons-%04d" % (n + 1)
+
+
+# --------------------------------------------------------------------------- #
+# Registre des jetons de confirmation (jetons.jsonl) — append-only, écrit
+# UNIQUEMENT par generer_jeton_confirmation. Lecture SEULE partout ailleurs.
+# --------------------------------------------------------------------------- #
+def _lire_jetons():
+    chemin = _chemin_jetons()
+    if not os.path.exists(chemin):
+        return []
+    out = []
+    for line in open(chemin, encoding="utf-8"):
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            out.append(json.loads(line))
+        except ValueError:
+            continue          # ligne corrompue ignorée (robustesse)
+    return out
+
+
+def jetons_emis():
+    """Vue LECTURE SEULE du registre : la liste des jetons émis (type='jeton').
+    Sert la jointure unique de nexus_98 (3e rideau). nexus_capital reste le SEUL
+    écrivain du registre — ceci n'écrit rien."""
+    return [j for j in _lire_jetons() if j.get("type") == "jeton"]
+
+
+def _jeton_record(jid):
+    """Dernier enregistrement de jeton pour cet id (ou None)."""
+    trouve = None
+    for j in _lire_jetons():
+        if j.get("type") == "jeton" and j.get("id") == jid:
+            trouve = j
+    return trouve
+
+
+def _prochain_jeton_id():
+    n = sum(1 for j in _lire_jetons() if j.get("type") == "jeton")
+    return "jeton-%04d" % (n + 1)
+
+
+def _jeton_deja_reference(jid):
+    """True si `jid` est DÉJÀ référencé par un event de force émis (capteur porteur
+    d'un champ `jeton`). C'est la définition de CONSOMMÉ, lue à la source unique
+    des capteurs (nexus_sense) : 1re couche de défense « le registre à l'émission »."""
+    for ev in nexus_sense.lire():
+        if ev.get("jeton") == jid:
+            return True
+    return False
+
+
+def _append_jeton(rec):
+    chemin = _chemin_jetons()
+    os.makedirs(os.path.dirname(chemin), exist_ok=True)
+    with open(chemin, "a", encoding="utf-8") as f:
+        f.write(json.dumps(rec, ensure_ascii=False) + "\n")
 
 
 def _to_dt(x):

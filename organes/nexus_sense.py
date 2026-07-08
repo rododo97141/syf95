@@ -35,9 +35,14 @@ QUALITES = ("validee", "reprise")  # validée du 1er coup, ou a nécessité une 
 
 def log_event(tache, statut="ok", mode="assiste", duree_min=None, feedback=None,
               qualite=None, tokens=None, impact=None, difficulte=None, tier=None,
-              note=None, fiche=None):
+              note=None, fiche=None, jeton=None):
     """Ecrit UN capteur (une ligne JSONL) et renvoie l'evenement.
-    Fonction propre, reutilisable par la boucle (mode bibliotheque). Une seule logique d'ecriture."""
+    Fonction propre, reutilisable par la boucle (mode bibliotheque). Une seule logique d'ecriture.
+
+    `jeton` (AJOUT PUR) : id d'un jeton de confirmation HITL (registre nexus_capital)
+    inscrit dans un CHAMP STRUCTURÉ de l'event de force — jamais dans du texte libre
+    imitable. Absent (défaut None) => la clé `jeton` n'est PAS écrite : l'événement
+    reste BYTE-IDENTIQUE au format historique (rétrocompat stricte)."""
     d, journal = _chemins()
     os.makedirs(d, exist_ok=True)
     event = {
@@ -55,6 +60,10 @@ def log_event(tache, statut="ok", mode="assiste", duree_min=None, feedback=None,
         "note": note,
         "fiche": fiche,         # slug de la fiche mémoire (recall) qui a servi, ou None
     }
+    # AJOUT PUR : la clé n'apparaît QUE si un jeton est fourni. jeton=None (défaut)
+    # => aucune clé ajoutée => JSON strictement identique au format d'avant.
+    if jeton is not None:
+        event["jeton"] = jeton  # champ structuré : id du jeton HITL consommé
     with open(journal, "a", encoding="utf-8") as f:
         f.write(json.dumps(event, ensure_ascii=False) + "\n")
     return event
