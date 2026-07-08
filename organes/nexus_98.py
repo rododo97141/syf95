@@ -94,11 +94,18 @@ def signal_backlog(bilan):
     return None
 
 
-def calc_verdict(signaux, n_dette=0, n_coupures=0):
+def calc_verdict(signaux, n_dette=0, n_coupures=0, jointure_alertes=0):
     """Verdict de santé (fonction PURE, testable sans serveur). Reprend la règle
     historique fondée sur le NOMBRE de signaux, et laisse le backlog HITL ET le
     TAUX de coupures budget la faire monter par SEUIL. Une coupure ISOLÉE
-    (n_coupures < seuil de vigilance) ne fait RIEN monter : ok-inerte."""
+    (n_coupures < seuil de vigilance) ne fait RIEN monter : ok-inerte.
+
+    `jointure_alertes` (AJOUT) : nombre de ruptures de la JOINTURE UNIQUE
+    jeton↔event de force (self-reward mécanique, id forgé, doublon d'id). Une
+    SEULE rupture est une atteinte DIRECTE à la ligne rouge de doctrine — ALERTE
+    d'emblée, même isolée (on ne « tolère » pas un début d'auto-récompense)."""
+    if jointure_alertes > 0:
+        return "🔴 ALERTE — rupture de jointure jeton↔force (auto-récompense ?)"
     if (n_dette >= BACKLOG_ALERTE or n_coupures >= BUDGET_COUPURES_ALERTE
             or len(signaux) > 2):
         return "🔴 ALERTE — plusieurs signaux, intervention recommandée"
@@ -106,6 +113,83 @@ def calc_verdict(signaux, n_dette=0, n_coupures=0):
             or n_coupures >= BUDGET_COUPURES_VIGILANCE):
         return "🟡 VIGILANCE — quelques signaux, rien de critique"
     return "🟢 SAIN — l'organisme va bien"
+
+
+# --------------------------------------------------------------------------- #
+# JOINTURE UNIQUE jeton ↔ event de force (3e RIDEAU, LECTURE SEULE).
+# 1er rideau = le registre à l'émission (nexus_capital.appliquer refuse un jeton
+# absent/inconnu/rejoué) ; 2e rideau = l'AST (l'observer ne peut ni importer la
+# fabrique de jetons ni appeler appliquer) ; 3e rideau = CETTE lecture a posteriori.
+# Défense en profondeur : même si les deux premiers rideaux étaient contournés, le
+# bilan de 98 rendrait l'anomalie VISIBLE (verdict non-SAIN). Cette lecture ne fait
+# JAMAIS tomber 98 (tout défensif → aucune alerte inventée en dernier recours).
+# --------------------------------------------------------------------------- #
+def evenements_force(cap):
+    """Events de FORCE parmi les capteurs : porteurs d'une `fiche` ET d'un `statut`
+    compté par nexus_force.calculer_forces (succes|echec). Ce sont les SEULS events
+    qui bougent la force ; chacun DOIT être adossé à un jeton humain. Défensif."""
+    out = []
+    for e in (cap or []):
+        try:
+            if e.get("fiche") and e.get("statut") in ("succes", "echec"):
+                out.append(e)
+        except Exception:
+            continue
+    return out
+
+
+def jetons_registre():
+    """Vue LECTURE SEULE du registre des jetons (nexus_capital.jetons_emis) :
+    {id: record}. Module absent/cassé → None (98 dégrade, ne tombe pas) : dans ce
+    cas on N'INVENTE aucune alerte « inconnu » (dégradation prudente)."""
+    try:
+        import nexus_capital
+        emis = nexus_capital.jetons_emis()
+        reg = {}
+        for j in (emis or []):
+            jid = j.get("id")
+            if jid is not None:
+                reg[jid] = j
+        return reg
+    except Exception:
+        return None
+
+
+def signaux_jointure(cap, registre):
+    """JOINTURE UNIQUE entre events de force et registre des jetons. Renvoie la
+    liste des alertes (str), défensivement (toute anomalie interne → pas d'alerte
+    inventée, jamais d'exception remontée au verdict) :
+      • event de force SANS jeton                        → auto-récompense / oubli du verrou ;
+      • event de force → jeton INCONNU du registre       → id forgé (si registre lisible) ;
+      • MÊME jeton référencé par ≥2 events de force       → copie d'id (usage non-unique).
+    Un event sans jeton, un jeton inconnu OU un jeton double ⇒ verdict non-SAIN."""
+    alertes = []
+    try:
+        evs = evenements_force(cap)
+        sans = 0
+        vus = {}
+        for e in evs:
+            jid = e.get("jeton")
+            if not jid:
+                sans += 1
+            else:
+                vus[jid] = vus.get(jid, 0) + 1
+        if sans:
+            alertes.append(
+                "🔴 %d event(s) de force SANS jeton — la force ne peut venir que "
+                "d'un jeton humain (nexus_capital)" % sans)
+        for jid, n in sorted(vus.items()):
+            if registre is not None and jid not in registre:
+                alertes.append(
+                    "🔴 event de force → jeton INCONNU du registre (%r) — id forgé ?"
+                    % (jid,))
+            if n >= 2:
+                alertes.append(
+                    "🔴 jeton %r référencé %d× par des events de force (doublon) — "
+                    "copie d'id, un jeton est à usage UNIQUE" % (jid, n))
+    except Exception:
+        return alertes
+    return alertes
 
 
 # --------------------------------------------------------------------------- #
@@ -556,14 +640,26 @@ def main():
           f"{' (↗ tendance)' if bp['tendance'] else ''} · "
           f"plus vieux = {bp['age_examens_max']} examen(s) · archives [{resume_arch}]\n")
 
+    # --- JOINTURE UNIQUE jeton ↔ event de force (3e rideau, LECTURE SEULE) : la
+    # force ne peut venir que d'un jeton humain valide, consommé UNE fois. Toute
+    # rupture (event sans jeton, jeton inconnu, doublon d'id) = auto-récompense
+    # potentielle → non-SAIN. Cette lecture ne peut JAMAIS faire tomber 98. ---
+    registre = jetons_registre()
+    alertes_jointure = signaux_jointure(cap, registre)
+    if alertes_jointure:
+        for a in alertes_jointure:
+            signaux.append(a)
+
     print("🚨 Signaux de danger (Danger Theory — on réagit au dommage) :")
     if signaux:
         for s in signaux: print(f"   {s}")
     else:
         print("   ✅ aucun signal de dommage actif")
 
-    # Verdict de santé (backlog HITL ET taux de coupures peuvent faire monter).
-    verdict = calc_verdict(signaux, n_dette, bb["n_coupures"])
+    # Verdict de santé (backlog HITL, taux de coupures ET jointure jeton↔force
+    # peuvent faire monter le verdict).
+    verdict = calc_verdict(signaux, n_dette, bb["n_coupures"],
+                           jointure_alertes=len(alertes_jointure))
     print(f"\n   VERDICT DE SANTÉ : {verdict}")
 
 if __name__ == "__main__":
