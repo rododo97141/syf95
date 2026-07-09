@@ -31,8 +31,11 @@ Endpoints :
     POST /reactiver   {id}                                             -> EN_ATTENTE (retour)
     POST /memorize    {content, domain, category, title?, summary?,    -> STRUCTURE (direct)
                        source?}
+    POST /superseder  {path, superseded_par?, date_validite?}          -> supersession (geste humain)
+    POST /desuperseder {path}                                          -> annule la supersession
     GET  /recall?query=&domain=&category=&scope=all|brut|en_attente|structure
-                 &format=sas   (opt-in : regroupe le classement global par étage)
+                 &format=sas   (opt-in : regroupe le classement global par étage,
+                                + un 4e bloc `superseded` pour les fiches oubliées)
 """
 
 import os
@@ -143,6 +146,75 @@ def _lire_provenance(text, etage=None):
 
 
 # --------------------------------------------------------------------------- #
+# Supersession — l'ORGANE D'OUBLI v1 (supersession TOTALE). Trois champs de
+# provenance qui VOYAGENT brut -> en_attente -> structure exactement comme
+# source/verifie, jamais perdus ni blanchis à la promotion :
+#   • superseded     : 'oui' si Kily a jugé la fiche fausse ; défaut 'non'.
+#   • superseded_par : id/chemin de la fiche successeur, ou texte libre.
+#   • date_validite  : date jusqu'à laquelle la fiche était tenue pour vraie.
+# Une fiche supersédée CESSE de remonter en tête du recall (sas la route dans un
+# 4e bloc, hors des blocs structure/en_attente/brut) SANS être détruite : le
+# fichier reste sur disque, réversible via desuperseder. C'est un OUBLI, pas une
+# suppression. Comme la provenance : marqueurs HTML en FIN de fiche, écrits
+# UNIQUEMENT hors défaut — une fiche superseded='non' reste BYTE-IDENTIQUE.
+# GESTE HUMAIN : superseded n'est JAMAIS posé automatiquement (jamais un effet de
+# bord d'une écriture) ; seule la fonction superseder() (geste de Kily) le pose.
+# --------------------------------------------------------------------------- #
+SUPERSEDED_DEFAUT = "non"        # défaut : la fiche est tenue pour valide
+
+_SUPERSEDED_RE = re.compile(r"<!--\s*superseded:\s*(.*?)\s*-->")
+_SUPERSEDED_PAR_RE = re.compile(r"<!--\s*superseded_par:\s*(.*?)\s*-->")
+_DATE_VALIDITE_RE = re.compile(r"<!--\s*date_validite:\s*(.*?)\s*-->")
+
+
+def _supersession_defaut(superseded):
+    """True si `superseded` est au défaut ('' ou 'non') : dans ce cas AUCUN
+    marqueur de supersession n'est écrit et la fiche reste byte-identique."""
+    return (superseded or "") in ("", SUPERSEDED_DEFAUT)
+
+
+def _marqueurs_supersession(superseded, superseded_par, date_validite):
+    """Marqueurs machine (commentaires HTML) apposés en FIN de fiche. Écrits
+    seulement hors défaut — la 1re ligne (titre) n'est jamais touchée."""
+    return "\n<!-- superseded: %s -->\n<!-- superseded_par: %s -->\n<!-- date_validite: %s -->\n" % (
+        superseded or SUPERSEDED_DEFAUT, superseded_par or "", date_validite or "")
+
+
+def _retirer_marqueurs_supersession(text):
+    """Retire le bloc de marqueurs de supersession (retour byte-identique à
+    l'avant-supersession pour une fiche à marqueurs). Idempotent."""
+    return re.sub(
+        r"\n<!-- superseded: .*? -->\n<!-- superseded_par: .*? -->\n<!-- date_validite: .*? -->\n",
+        "", text or "", flags=re.S)
+
+
+def _lire_supersession(text, etage=None):
+    """Lit (superseded, superseded_par, date_validite) d'une fiche. en_attente :
+    depuis le meta JSON. Autres étages : depuis les marqueurs. Absence => défaut
+    (non / vide / vide) : une fiche non explicitement supersédée EST valide."""
+    text = text or ""
+    if etage == "en_attente":
+        m = _META_RE.search(text)
+        meta = {}
+        if m:
+            try:
+                meta = json.loads(m.group(1))
+            except ValueError:
+                meta = {}
+        superseded = (meta.get("superseded") or "").strip() or SUPERSEDED_DEFAUT
+        superseded_par = (meta.get("superseded_par") or "").strip()
+        date_validite = (meta.get("date_validite") or "").strip()
+        return superseded, superseded_par, date_validite
+    ms = _SUPERSEDED_RE.search(text)
+    mp = _SUPERSEDED_PAR_RE.search(text)
+    md = _DATE_VALIDITE_RE.search(text)
+    superseded = (ms.group(1).strip() if ms else SUPERSEDED_DEFAUT) or SUPERSEDED_DEFAUT
+    superseded_par = mp.group(1).strip() if mp else ""
+    date_validite = md.group(1).strip() if md else ""
+    return superseded, superseded_par, date_validite
+
+
+# --------------------------------------------------------------------------- #
 # Étage 1 — BRUT : capture autonome, append-only, un journal par jour
 # --------------------------------------------------------------------------- #
 def add_note(data):
@@ -150,6 +222,9 @@ def add_note(data):
     tag = (data.get("tag") or "").strip()
     source = (data.get("source") or "").strip()
     verifie = (data.get("verifie") or "").strip()
+    superseded = (data.get("superseded") or "").strip()
+    superseded_par = (data.get("superseded_par") or "").strip()
+    date_validite = (data.get("date_validite") or "").strip()
     os.makedirs(BRUT, exist_ok=True)
     day = datetime.date.today().strftime("%Y-%m-%d")
     file_path = os.path.join(BRUT, day + ".md")
@@ -159,6 +234,9 @@ def add_note(data):
     # (source externe), donc la capture interne reste byte-identique à l'existant.
     if not _prov_defaut(source, verifie):
         entry += _marqueurs_provenance(source, verifie)
+    # La supersession voyage aussi dès le brut ; marqueur SEULEMENT hors défaut.
+    if not _supersession_defaut(superseded):
+        entry += _marqueurs_supersession(superseded, superseded_par, date_validite)
     with open(file_path, "a", encoding="utf-8") as f:
         if new_file:
             f.write("# Notes brutes — %s\n" % today())
@@ -206,12 +284,16 @@ def update_indexes():
         f.write("".join(root_lines))
 
 
-def _write_struct(domain, category, title, content, summary="", source="", verifie=""):
+def _write_struct(domain, category, title, content, summary="", source="", verifie="",
+                  superseded="", superseded_par="", date_validite=""):
     """Écrit une fiche structurée. Si elle existe : fusion (section datée), pas de doublon.
 
     `source`/`verifie` = provenance qui VOYAGE depuis en_attente (jamais blanchie
     à la promotion). Un marqueur machine est apposé en FIN de fiche UNIQUEMENT
-    hors défaut (source externe) : les fiches internes restent byte-identiques."""
+    hors défaut (source externe) : les fiches internes restent byte-identiques.
+    `superseded`/`superseded_par`/`date_validite` VOYAGENT de la même façon : le
+    marqueur de supersession n'est écrit qu'hors défaut (superseded='oui'), donc
+    une fiche non supersédée reste byte-identique à l'existant."""
     domain = slugify(domain or "general")
     category = slugify(category or "divers")
     title = (title or content[:60] or "sans-titre").strip()
@@ -221,6 +303,8 @@ def _write_struct(domain, category, title, content, summary="", source="", verif
     file_path = os.path.join(dir_path, slug + ".md")
     created = not os.path.exists(file_path)
     marqueurs = "" if _prov_defaut(source, verifie) else _marqueurs_provenance(source, verifie)
+    marqueurs_sup = ("" if _supersession_defaut(superseded)
+                     else _marqueurs_supersession(superseded, superseded_par, date_validite))
 
     if created:
         parts = ["# %s — domaine: %s / catégorie: %s\n" % (title, domain, category)]
@@ -231,6 +315,7 @@ def _write_struct(domain, category, title, content, summary="", source="", verif
         if source:
             parts.append("\n## Source\n%s\n" % source)
         parts.append(marqueurs)
+        parts.append(marqueurs_sup)
         with open(file_path, "w", encoding="utf-8") as f:
             f.write("".join(parts))
     else:
@@ -250,6 +335,9 @@ def _write_struct(domain, category, title, content, summary="", source="", verif
         # est pas déjà : le champ VOYAGE sans jamais être blanchi ni dupliqué.
         if marqueurs and not _SOURCE_RE.search(existing):
             add.append(marqueurs)
+        # Idem pour la supersession : (ré)apposée seulement si absente.
+        if marqueurs_sup and not _SUPERSEDED_RE.search(existing):
+            add.append(marqueurs_sup)
         with open(file_path, "w", encoding="utf-8") as f:
             f.write(existing + "".join(add))
 
@@ -270,6 +358,9 @@ def memorize(data):
         (data.get("content") or "").strip(),
         (data.get("summary") or "").strip(), (data.get("source") or "").strip(),
         (data.get("verifie") or "").strip(),
+        (data.get("superseded") or "").strip(),
+        (data.get("superseded_par") or "").strip(),
+        (data.get("date_validite") or "").strip(),
     )
 
 
@@ -284,6 +375,9 @@ def stage(data):
     summary = (data.get("summary") or "").strip()
     source = (data.get("source") or "").strip()
     verifie = (data.get("verifie") or "").strip()
+    superseded = (data.get("superseded") or "").strip()
+    superseded_par = (data.get("superseded_par") or "").strip()
+    date_validite = (data.get("date_validite") or "").strip()
     origin = (data.get("origin") or "").strip()
     os.makedirs(EN_ATTENTE, exist_ok=True)
 
@@ -293,8 +387,12 @@ def stage(data):
         i += 1
         sid = "%s-%d" % (base, i)
 
+    # La supersession VOYAGE dans le meta (comme source/verifie) pour survivre à
+    # la promotion. Défaut 'non' / vide : une fiche non supersédée reste neutre.
     meta = {"domain": domain, "category": category, "title": title,
             "summary": summary, "source": source, "verifie": verifie,
+            "superseded": superseded, "superseded_par": superseded_par,
+            "date_validite": date_validite,
             "origin": origin, "staged": today(), "content": content}
     body = ["<!-- meta: %s -->\n" % json.dumps(meta, ensure_ascii=False)]
     body.append("# (en attente) %s — %s / %s\n" % (title, domain, category))
@@ -342,7 +440,9 @@ def promote(data):
     category = data.get("category") or meta.get("category")
     res = _write_struct(domain, category, meta.get("title"),
                         meta.get("content", ""), meta.get("summary", ""),
-                        meta.get("source", ""), meta.get("verifie", ""))
+                        meta.get("source", ""), meta.get("verifie", ""),
+                        meta.get("superseded", ""), meta.get("superseded_par", ""),
+                        meta.get("date_validite", ""))
     os.remove(path)  # validé -> sort de la file d'attente
     res["promu_depuis"] = sid
     return res
@@ -486,6 +586,91 @@ def reactiver(sid):
 
 
 # --------------------------------------------------------------------------- #
+# Supersession — GESTE HUMAIN (organe d'oubli v1). NON destructif, RÉVERSIBLE.
+# --------------------------------------------------------------------------- #
+def _chemin_memoire(rel):
+    """Résout un chemin relatif SOUS ROOT (garde anti-traversée). Renvoie le
+    chemin absolu ou None si hors mémoire."""
+    racine = os.path.normpath(ROOT)
+    abspath = os.path.normpath(os.path.join(racine, rel))
+    if abspath != racine and not abspath.startswith(racine + os.sep):
+        return None
+    return abspath
+
+
+def _maj_meta_supersession(text, superseded, superseded_par, date_validite):
+    """Met à jour les champs de supersession dans le meta JSON (en_attente)."""
+    m = _META_RE.search(text)
+    meta = {}
+    if m:
+        try:
+            meta = json.loads(m.group(1))
+        except ValueError:
+            meta = {}
+    meta["superseded"] = superseded
+    meta["superseded_par"] = superseded_par
+    meta["date_validite"] = date_validite
+    remplacement = "<!-- meta: %s -->" % json.dumps(meta, ensure_ascii=False)
+    if m:
+        return text[:m.start()] + remplacement + text[m.end():]
+    return remplacement + "\n" + text
+
+
+def superseder(data):
+    """GESTE HUMAIN — marque une fiche EXISTANTE comme supersédée (Kily l'a jugée
+    fausse). NON destructif : le contenu est PRÉSERVÉ, seuls les marqueurs de
+    supersession sont (ré)apposés en fin de fiche. RÉVERSIBLE via desuperseder.
+    JAMAIS appelé automatiquement : l'oubli est une décision humaine, pas un
+    effet de bord d'une écriture. La fiche cesse de remonter en tête du recall
+    (sas la route dans le bloc `superseded`) mais reste sur disque et retrouvable."""
+    rel = (data.get("path") or "").strip()
+    if not rel:
+        return {"error": "champ 'path' requis"}
+    superseded_par = (data.get("superseded_par") or "").strip()
+    date_validite = (data.get("date_validite") or "").strip()
+    abspath = _chemin_memoire(rel)
+    if abspath is None:
+        return {"error": "chemin hors mémoire: %s" % rel}
+    if not os.path.exists(abspath):
+        return {"error": "fiche introuvable: %s" % rel}
+    with open(abspath, "r", encoding="utf-8") as f:
+        text = f.read()
+    if _META_RE.search(text):
+        text = _maj_meta_supersession(text, "oui", superseded_par, date_validite)
+    else:
+        text = _retirer_marqueurs_supersession(text)   # idempotent : re-supersede
+        text += _marqueurs_supersession("oui", superseded_par, date_validite)
+    with open(abspath, "w", encoding="utf-8") as f:
+        f.write(text)
+    return {"ok": True, "path": rel, "superseded": "oui",
+            "superseded_par": superseded_par, "date_validite": date_validite,
+            "reversible": True}
+
+
+def desuperseder(data):
+    """Inverse de superseder — RÉVERSIBILITÉ de l'oubli : la fiche redevient
+    valide (superseded='non'). Sur une fiche à marqueurs, le retour est
+    byte-identique à l'avant-supersession (les marqueurs sont retirés)."""
+    rel = (data.get("path") or "").strip()
+    if not rel:
+        return {"error": "champ 'path' requis"}
+    abspath = _chemin_memoire(rel)
+    if abspath is None:
+        return {"error": "chemin hors mémoire: %s" % rel}
+    if not os.path.exists(abspath):
+        return {"error": "fiche introuvable: %s" % rel}
+    with open(abspath, "r", encoding="utf-8") as f:
+        text = f.read()
+    if _META_RE.search(text):
+        text = _maj_meta_supersession(text, SUPERSEDED_DEFAUT, "", "")
+    else:
+        text = _retirer_marqueurs_supersession(text)
+    with open(abspath, "w", encoding="utf-8") as f:
+        f.write(text)
+    return {"ok": True, "path": rel, "superseded": "non"}
+
+
+# --------------------------------------------------------------------------- #
 # GET /domains et /recall
 # --------------------------------------------------------------------------- #
 def get_domains():
@@ -530,9 +715,12 @@ def _scan(base, query, etage, fdomain=None, fcategory=None):
             # La provenance est LUE ici (jamais dans _search : elle n'influence
             # pas le classement) et n'apparaît QUE dans le format sas.
             source, verifie = _lire_provenance(text, etage)
+            superseded, superseded_par, date_validite = _lire_supersession(text, etage)
             out.append({"etage": etage, "domain": domain, "category": category,
                         "file": fl, "path": rel, "excerpt": text[:400],
                         "source": source, "verifie": verifie,
+                        "superseded": superseded, "superseded_par": superseded_par,
+                        "date_validite": date_validite,
                         "_search": (text + " " + fl).lower()})
     return out
 
@@ -671,11 +859,20 @@ def _strip_internal(item):
 # SAS mémoire (opt-in format=sas) — étiqueter, jamais cacher ni décoter
 # --------------------------------------------------------------------------- #
 # Le sas ne recalcule RIEN et ne reclasse RIEN : il prend le classement GLOBAL
-# (issu de l'unique appel à rank_candidates dans recall) et le REGROUPE en trois
-# blocs étiquetés — structure (validé) / en_attente (analysé-non-validé) / brut
+# (issu de l'unique appel à rank_candidates dans recall) et le REGROUPE en blocs
+# étiquetés — structure (validé) / en_attente (analysé-non-validé) / brut
 # (non-trié) — chacun dans l'ordre du classement global. Il dit au consommateur
 # ce qu'il regarde ; il ne décide pas à sa place.
-_SAS_ETAGES = ("structure", "en_attente", "brut")
+#
+# ORGANE D'OUBLI : un 4e bloc `superseded` recueille les fiches jugées fausses
+# (superseded='oui'), quel que soit leur étage de STOCKAGE. Le routage se fait sur
+# superseded AVANT l'étage : une fiche supersédée sort donc de structure/en_attente
+# /brut et n'est JAMAIS candidate à `struct_top` (ni à l'alerte). Elle cesse ainsi
+# de remonter en tête du recall sans être détruite : elle reste dans le bloc
+# `superseded`, retrouvable.
+_SAS_ETAGES = ("structure", "en_attente", "brut")   # étages de STOCKAGE (routage par défaut)
+_SAS_SUPERSEDED = "superseded"                       # 4e bloc : fiches oubliées (hors étage)
+_SAS_BLOCS = _SAS_ETAGES + (_SAS_SUPERSEDED,)        # ordre des blocs dans la réponse
 
 
 def _sas_candidat(item):
@@ -691,6 +888,11 @@ def _sas_candidat(item):
         # couverture d'étiquetage est de 100 % (tout candidat porte source+verifie).
         "source": item.get("source", SOURCE_INTERNE),
         "verifie": item.get("verifie", VERIFIE_DEFAUT),
+        # Supersession exposée de même : le consommateur voit quelle fiche a été
+        # oubliée, par quoi elle est remplacée et jusqu'à quand elle valait.
+        "superseded": item.get("superseded", SUPERSEDED_DEFAUT),
+        "superseded_par": item.get("superseded_par", ""),
+        "date_validite": item.get("date_validite", ""),
         "_relevance": item.get("_relevance", 0.0),
         "_force": item.get("_force", 1.0),
         "_score": item.get("_score", 0.0),
@@ -709,15 +911,25 @@ def _format_sas(scope, results):
     une entrée PAR étage hors-structure dont le meilleur candidat bat
     STRICTEMENT le meilleur structure. Chaque entrée = {etage, path, ecart} avec
     ecart = score_étage − score_du_meilleur_structure, ou null si AUCUN structure
-    ne matche (pas de sentinelle, pas de seuil)."""
-    blocs = {e: [] for e in _SAS_ETAGES}
+    ne matche (pas de sentinelle, pas de seuil).
+
+    Une fiche superseded='oui' est routée dans le bloc `superseded` AVANT tout
+    étage : elle sort donc des blocs structure/en_attente/brut et ne peut jamais
+    être `struct_top` ni figurer dans l'alerte. Le bloc `superseded` n'entre pas
+    dans l'arbitrage de l'alerte (une fiche oubliée n'a plus à concourir)."""
+    blocs = {b: [] for b in _SAS_BLOCS}
     for r in results:
+        # ROUTAGE : la supersession prime sur l'étage de stockage.
+        if r.get("superseded") == "oui":
+            blocs[_SAS_SUPERSEDED].append(_sas_candidat(r))
+            continue
         et = r.get("etage")
-        if et in blocs:
+        if et in _SAS_ETAGES:
             blocs[et].append(_sas_candidat(r))
 
     # results est en ordre de classement global : le 1er de chaque bloc est le
-    # meilleur de son étage.
+    # meilleur de son étage. Une supersédée est déjà HORS de structure, donc
+    # jamais struct_top (garantie du routage ci-dessus).
     struct_top = blocs["structure"][0]["_score"] if blocs["structure"] else None
     alerte = []
     for et in ("en_attente", "brut"):
@@ -730,7 +942,7 @@ def _format_sas(scope, results):
             alerte.append({"etage": et, "path": blocs[et][0]["path"],
                            "ecart": meilleur - struct_top})
 
-    count = sum(len(blocs[e]) for e in _SAS_ETAGES)
+    count = sum(len(blocs[b]) for b in _SAS_BLOCS)
     return {"ok": True, "scope": scope, "format": "sas", "count": count,
             "blocs": blocs, "alerte": alerte or None}
 
@@ -912,6 +1124,12 @@ class Handler(BaseHTTPRequestHandler):
             if not (data.get("content") or "").strip():
                 return self._send({"error": "champ 'content' requis"}, 400)
             return self._send(memorize(data))
+        if u.path == "/superseder":
+            res = superseder(data)
+            return self._send(res, 400 if "error" in res else 200)
+        if u.path == "/desuperseder":
+            res = desuperseder(data)
+            return self._send(res, 400 if "error" in res else 200)
         if u.path == "/retro_tag":
             return self._send(retro_tag_source(
                 (data.get("source") or SOURCE_INTERNE).strip() or SOURCE_INTERNE,

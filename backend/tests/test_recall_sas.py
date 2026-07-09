@@ -296,14 +296,23 @@ def _valider_schema(resp):
     assert isinstance(resp["count"], int) and resp["count"] >= 0
 
     blocs = resp["blocs"]
-    assert set(blocs.keys()) == {"structure", "en_attente", "brut"}
+    # Ajout organe d'oubli : un 4e bloc `superseded` (les fiches jugées fausses).
+    assert set(blocs.keys()) == {"structure", "en_attente", "brut", "superseded"}
     total = 0
     for etage, cands in blocs.items():
         assert isinstance(cands, list)
         total += len(cands)
         for c in cands:
-            # INVARIANT DE SÉPARATION : l'étage du candidat == la clé du bloc.
-            assert c["etage"] == etage
+            if etage == "superseded":
+                # Le bloc `superseded` route sur superseded='oui', PAS sur l'étage :
+                # le candidat garde son étage de STOCKAGE (structure/en_attente/brut).
+                assert c["superseded"] == "oui"
+                assert c["etage"] in ("structure", "en_attente", "brut")
+            else:
+                # INVARIANT DE SÉPARATION : l'étage du candidat == la clé du bloc,
+                # et une fiche NON supersédée uniquement.
+                assert c["etage"] == etage
+                assert c["superseded"] == "non"
             assert isinstance(c["file"], str) and isinstance(c["path"], str)
             assert isinstance(c["excerpt"], str)
             assert c["domain"] is None or isinstance(c["domain"], str)
@@ -312,6 +321,11 @@ def _valider_schema(resp):
             # présents sur CHAQUE candidat (couverture 100 %), jamais None.
             assert isinstance(c["source"], str) and c["source"]
             assert c["verifie"] in ("oui", "non")
+            # Étiquetage de supersession (extension organe d'oubli) : les trois
+            # champs présents sur CHAQUE candidat.
+            assert c["superseded"] in ("oui", "non")
+            assert isinstance(c["superseded_par"], str)
+            assert isinstance(c["date_validite"], str)
             for k in ("_relevance", "_force", "_score"):
                 assert isinstance(c[k], (int, float)) and not isinstance(c[k], bool)
     assert resp["count"] == total
