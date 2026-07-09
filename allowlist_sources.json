@@ -1,5 +1,10 @@
 {
   "_note": "Allowlist des sources EXTERNES autorisées à nourrir NEXUS. DONNÉE co-écrite, ÉDITABLE PAR KILY SEUL — le système ne l'écrit JAMAIS (il ne fait que PROPOSER, cf. propositions_sources.jsonl). Toute source absente d'ici est REFUSÉE à l'ingestion (digue close par défaut). 'interne' n'est jamais une source externe : l'organe d'ingestion ne produit JAMAIS d'interne.",
   "_champs": "chaque entrée de 'sources' : { nom (identifiant exact utilisé comme champ source), note (pourquoi Kily la juge fiable) }. Ajouter/retirer une entrée = éditer CE fichier à la main.",
-  "sources": []
+  "sources": [
+    {
+      "nom": "Agent-Memory-Paper-List",
+      "note": "Boussole du champ mémoire-d'agents : bibliographie de recherche (GitHub Shichun-Liu/Agent-Memory-Paper-List) tenue par des chercheurs, index vers sources primaires. Fiable comme CARTE, pas comme vérité en soi -> verifie=non. 1re source, graine de NOTRE carte serrurier (Shu Ha Ri) ; chaque entrée reste ancrée à sa source réelle (pont, pas miroir)."
+    }
+  ]
 }
