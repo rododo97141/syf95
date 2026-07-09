@@ -270,8 +270,11 @@ def test_T4_sas_etendu_golden_et_defaut_byte_identique(mem):
             g = par_path[c["path"]]
             for k in _ATTENDU_CAND:
                 assert c[k] == g[k], "champ %s divergent (format sas altéré)" % k
-            # les seules clés en plus : source et verifie.
-            assert set(c.keys()) - set(_ATTENDU_CAND) == {"source", "verifie"}
+            # les seules clés en plus : provenance (source, verifie) et
+            # supersession (superseded, superseded_par, date_validite — ajout
+            # organe d'oubli, format sas de PR#70 inchangé hors ce bloc).
+            assert set(c.keys()) - set(_ATTENDU_CAND) == {
+                "source", "verifie", "superseded", "superseded_par", "date_validite"}
 
     # (c) DÉFAUT (sans format=sas) reste BYTE-IDENTIQUE au golden PR66.
     defaut = mem.recall({"query": [q], "scope": ["all"]})
