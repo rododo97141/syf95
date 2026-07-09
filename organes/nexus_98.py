@@ -512,6 +512,78 @@ def bilan_promotion():
                 "archives_par_raison": {}}
 
 
+# --------------------------------------------------------------------------- #
+# INGESTION EXTERNE — DIAGNOSTICS LECTURE SEULE (ne pilote rien, ne tombe jamais)
+# 98 OBSERVE le canal d'entrée externe. Trois lectures, toutes défensives :
+#   • ratio interne/externe : DIAGNOSTIC, JAMAIS un objectif à optimiser. Nommé
+#     ANTI-GOODHART : mesurer le solipsisme pour le VOIR, pas pour piloter un
+#     chiffre (baisser le ratio en fabriquant du faux-externe serait pire que le
+#     solipsisme). 98 le REND, il ne le cible pas.
+#   • la DIGUE : zéro ingestion hors-allowlist. La garde est dans nexus_ingest
+#     (qui LÈVE) ; 98 vérifie le RÉSULTAT observable : aucun candidat externe ne
+#     porte une source absente de l'allowlist.
+#   • la COUVERTURE d'étiquetage : 100 % des candidats externes portent une
+#     source (jamais blanchie). Un externe non étiqueté = une fuite d'étiquette.
+# Le binaire de solipsisme dérive de source == 'interne' EXACT : une source
+# nommée 'interne-x' (ou toute autre) compte EXTERNE (jamais un startswith).
+# --------------------------------------------------------------------------- #
+def est_interne(source):
+    """True SSI la source est EXACTEMENT 'interne'. Égalité stricte (JAMAIS un
+    startswith) : 'interne-x' est une source EXTERNE, pas une variante d'interne."""
+    return source == "interne"
+
+
+def ratio_solipsisme(candidats):
+    """DIAGNOSTIC (jamais un objectif) : part des fiches internes. `candidats` =
+    liste de dicts portant 'source'. Défensif : entrée non-liste → dict neutre.
+    Le ratio est OBSERVÉ, pas piloté (anti-Goodhart)."""
+    cands = candidats if isinstance(candidats, (list, tuple)) else []
+    total = len(cands)
+    interne = sum(1 for c in cands if isinstance(c, dict) and est_interne(c.get("source")))
+    externe = total - interne
+    return {
+        "total": total,
+        "interne": interne,
+        "externe": externe,
+        "ratio_interne": (interne / total) if total else None,
+        "_note": "diagnostic anti-Goodhart : observé, jamais posé en objectif",
+    }
+
+
+def couverture_etiquetage(candidats):
+    """Part des candidats EXTERNES effectivement ÉTIQUETÉS (source non vide et
+    lisible). Cible = 100 % : un externe sans étiquette est une fuite. Défensif."""
+    cands = candidats if isinstance(candidats, (list, tuple)) else []
+    externes = [c for c in cands if isinstance(c, dict) and not est_interne(c.get("source"))]
+    etiquetes = sum(1 for c in externes
+                    if isinstance((c or {}).get("source"), str) and (c or {}).get("source").strip())
+    return {
+        "externes": len(externes),
+        "etiquetes": etiquetes,
+        "couverture": (etiquetes / len(externes)) if externes else 1.0,
+        "complete": etiquetes == len(externes),
+    }
+
+
+def digue_ingestion(candidats, allowlist):
+    """La DIGUE observée : aucun candidat externe ne porte une source HORS
+    allowlist. `allowlist` = ensemble/itérable de noms permis. Renvoie le nombre
+    de fuites (0 attendu) et un échantillon. Défensif : ne lève jamais."""
+    try:
+        permises = set(allowlist or ())
+    except TypeError:
+        permises = set()
+    cands = candidats if isinstance(candidats, (list, tuple)) else []
+    hors = [c.get("source") for c in cands
+            if isinstance(c, dict) and not est_interne(c.get("source"))
+            and c.get("source") not in permises]
+    return {
+        "hors_allowlist": len(hors),
+        "digue_ok": len(hors) == 0,
+        "exemples": hors[:5],
+    }
+
+
 def get(path):
     with urllib.request.urlopen(BASE + path, timeout=5) as r:
         return json.loads(r.read().decode())
