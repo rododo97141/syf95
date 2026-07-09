@@ -86,16 +86,79 @@ def _isdir(*parts):
 
 
 # --------------------------------------------------------------------------- #
+# Provenance — champ `source` (+ `verifie`) qui VOYAGE tout le pipeline
+# brut -> en_attente -> structure, jamais perdu, jamais blanchi à la promotion.
+#   • source  : d'où vient la fiche. 'interne' = produit par le système lui-même
+#               (défaut) ; sinon le nom d'une source EXTERNE (allowlist).
+#   • verifie : jugement de Kily par fiche (vérité-du-fait). Défaut 'non'
+#               (« source fiable, fait non confirmé »). Seul Kily pose 'oui'.
+# Stockage machine-lisible SANS toucher la 1re ligne (titre) : marqueurs HTML
+# apposés en FIN de fiche pour structure/brut ; pour en_attente, la provenance
+# vit déjà dans le bloc meta JSON. Les marqueurs ne sont écrits QUE hors défaut
+# (source externe) : une fiche interne reste BYTE-IDENTIQUE à l'existant.
+# --------------------------------------------------------------------------- #
+SOURCE_INTERNE = "interne"     # sentinelle de provenance interne (EXACT, cf. 98)
+VERIFIE_DEFAUT = "non"         # « source fiable, fait non confirmé »
+
+_SOURCE_RE = re.compile(r"<!--\s*source:\s*(.*?)\s*-->")
+_VERIFIE_RE = re.compile(r"<!--\s*verifie:\s*(.*?)\s*-->")
+_META_RE = re.compile(r"<!-- meta: (.*?) -->", re.S)
+
+
+def _prov_defaut(source, verifie):
+    """True si (source, verifie) sont les valeurs par défaut (interne / non) :
+    dans ce cas AUCUN marqueur n'est écrit et la fiche reste byte-identique."""
+    return (source or "") in ("", SOURCE_INTERNE) and (verifie or "") in ("", VERIFIE_DEFAUT)
+
+
+def _marqueurs_provenance(source, verifie):
+    """Marqueurs machine (commentaires HTML) apposés en FIN de fiche. Écrits
+    seulement hors défaut — la 1re ligne (titre) n'est jamais touchée."""
+    return "\n<!-- source: %s -->\n<!-- verifie: %s -->\n" % (
+        source or SOURCE_INTERNE, verifie or VERIFIE_DEFAUT)
+
+
+def _lire_provenance(text, etage=None):
+    """Lit (source, verifie) d'une fiche. en_attente : depuis le meta JSON.
+    Autres étages : depuis les marqueurs. Absence => défaut (interne / non) :
+    tout ce que memory_api (seul écrivain) n'a pas explicitement étiqueté
+    externe EST interne par construction."""
+    text = text or ""
+    if etage == "en_attente":
+        m = _META_RE.search(text)
+        meta = {}
+        if m:
+            try:
+                meta = json.loads(m.group(1))
+            except ValueError:
+                meta = {}
+        source = (meta.get("source") or "").strip() or SOURCE_INTERNE
+        verifie = (meta.get("verifie") or "").strip() or VERIFIE_DEFAUT
+        return source, verifie
+    ms = _SOURCE_RE.search(text)
+    mv = _VERIFIE_RE.search(text)
+    source = ms.group(1).strip() if ms else SOURCE_INTERNE
+    verifie = mv.group(1).strip() if mv else VERIFIE_DEFAUT
+    return source or SOURCE_INTERNE, verifie or VERIFIE_DEFAUT
+
+
+# --------------------------------------------------------------------------- #
 # Étage 1 — BRUT : capture autonome, append-only, un journal par jour
 # --------------------------------------------------------------------------- #
 def add_note(data):
     content = (data.get("content") or "").strip()
     tag = (data.get("tag") or "").strip()
+    source = (data.get("source") or "").strip()
+    verifie = (data.get("verifie") or "").strip()
     os.makedirs(BRUT, exist_ok=True)
     day = datetime.date.today().strftime("%Y-%m-%d")
     file_path = os.path.join(BRUT, day + ".md")
     new_file = not os.path.exists(file_path)
     entry = "\n## %s%s\n%s\n" % (now_hm(), (" · #" + slugify(tag)) if tag else "", content)
+    # La provenance VOYAGE dès le brut : marqueur écrit SEULEMENT hors défaut
+    # (source externe), donc la capture interne reste byte-identique à l'existant.
+    if not _prov_defaut(source, verifie):
+        entry += _marqueurs_provenance(source, verifie)
     with open(file_path, "a", encoding="utf-8") as f:
         if new_file:
             f.write("# Notes brutes — %s\n" % today())
@@ -104,6 +167,7 @@ def add_note(data):
         "ok": True,
         "etage": "brut",
         "path": os.path.relpath(file_path, ROOT),
+        "source": source or SOURCE_INTERNE,
         "rappel": "Lance la passe d'analyse pour promouvoir le brut utile vers en_attente.",
     }
 
@@ -142,8 +206,12 @@ def update_indexes():
         f.write("".join(root_lines))
 
 
-def _write_struct(domain, category, title, content, summary="", source=""):
-    """Écrit une fiche structurée. Si elle existe : fusion (section datée), pas de doublon."""
+def _write_struct(domain, category, title, content, summary="", source="", verifie=""):
+    """Écrit une fiche structurée. Si elle existe : fusion (section datée), pas de doublon.
+
+    `source`/`verifie` = provenance qui VOYAGE depuis en_attente (jamais blanchie
+    à la promotion). Un marqueur machine est apposé en FIN de fiche UNIQUEMENT
+    hors défaut (source externe) : les fiches internes restent byte-identiques."""
     domain = slugify(domain or "general")
     category = slugify(category or "divers")
     title = (title or content[:60] or "sans-titre").strip()
@@ -152,6 +220,7 @@ def _write_struct(domain, category, title, content, summary="", source=""):
     os.makedirs(dir_path, exist_ok=True)
     file_path = os.path.join(dir_path, slug + ".md")
     created = not os.path.exists(file_path)
+    marqueurs = "" if _prov_defaut(source, verifie) else _marqueurs_provenance(source, verifie)
 
     if created:
         parts = ["# %s — domaine: %s / catégorie: %s\n" % (title, domain, category)]
@@ -161,6 +230,7 @@ def _write_struct(domain, category, title, content, summary="", source=""):
         parts.append("## Détail\n%s\n" % content)
         if source:
             parts.append("\n## Source\n%s\n" % source)
+        parts.append(marqueurs)
         with open(file_path, "w", encoding="utf-8") as f:
             f.write("".join(parts))
     else:
@@ -176,6 +246,10 @@ def _write_struct(domain, category, title, content, summary="", source=""):
         add.append("%s\n" % content)
         if source:
             add.append("\nSource : %s\n" % source)
+        # La provenance de la fiche fusionnée n'est (ré)apposée que si elle n'y
+        # est pas déjà : le champ VOYAGE sans jamais être blanchi ni dupliqué.
+        if marqueurs and not _SOURCE_RE.search(existing):
+            add.append(marqueurs)
         with open(file_path, "w", encoding="utf-8") as f:
             f.write(existing + "".join(add))
 
@@ -195,6 +269,7 @@ def memorize(data):
         data.get("domain"), data.get("category"), data.get("title"),
         (data.get("content") or "").strip(),
         (data.get("summary") or "").strip(), (data.get("source") or "").strip(),
+        (data.get("verifie") or "").strip(),
     )
 
 
@@ -208,6 +283,7 @@ def stage(data):
     title = (data.get("title") or content[:60] or "sans-titre").strip()
     summary = (data.get("summary") or "").strip()
     source = (data.get("source") or "").strip()
+    verifie = (data.get("verifie") or "").strip()
     origin = (data.get("origin") or "").strip()
     os.makedirs(EN_ATTENTE, exist_ok=True)
 
@@ -218,8 +294,8 @@ def stage(data):
         sid = "%s-%d" % (base, i)
 
     meta = {"domain": domain, "category": category, "title": title,
-            "summary": summary, "source": source, "origin": origin, "staged": today(),
-            "content": content}
+            "summary": summary, "source": source, "verifie": verifie,
+            "origin": origin, "staged": today(), "content": content}
     body = ["<!-- meta: %s -->\n" % json.dumps(meta, ensure_ascii=False)]
     body.append("# (en attente) %s — %s / %s\n" % (title, domain, category))
     if summary:
@@ -266,7 +342,7 @@ def promote(data):
     category = data.get("category") or meta.get("category")
     res = _write_struct(domain, category, meta.get("title"),
                         meta.get("content", ""), meta.get("summary", ""),
-                        meta.get("source", ""))
+                        meta.get("source", ""), meta.get("verifie", ""))
     os.remove(path)  # validé -> sort de la file d'attente
     res["promu_depuis"] = sid
     return res
@@ -451,10 +527,43 @@ def _scan(base, query, etage, fdomain=None, fcategory=None):
             # (texte + nom de fiche minusculisés dans « _search ») et c'est le
             # classement pertinence(IDF) × force, dans recall(), qui trie et
             # écarte les fiches sans aucun token de la requête.
+            # La provenance est LUE ici (jamais dans _search : elle n'influence
+            # pas le classement) et n'apparaît QUE dans le format sas.
+            source, verifie = _lire_provenance(text, etage)
             out.append({"etage": etage, "domain": domain, "category": category,
                         "file": fl, "path": rel, "excerpt": text[:400],
+                        "source": source, "verifie": verifie,
                         "_search": (text + " " + fl).lower()})
     return out
+
+
+# --------------------------------------------------------------------------- #
+# RÉTRO-TAG — memory_api est le SEUL écrivain : stampe la provenance des fiches
+# structure existantes qui n'en portent pas encore (baseline 'interne'). Le
+# défaut de LECTURE est déjà 'interne' ; le rétro-tag le rend EXPLICITE et
+# auditable (marqueur écrit), single-writer. Idempotent : une fiche déjà
+# étiquetée n'est jamais réécrite.
+# --------------------------------------------------------------------------- #
+def retro_tag_source(source=SOURCE_INTERNE, verifie=VERIFIE_DEFAUT):
+    """Appose le marqueur de provenance sur chaque fiche structure non encore
+    étiquetée. Renvoie {total, etiquetees, deja} — baseline = total/total."""
+    total = etiquetees = deja = 0
+    if os.path.isdir(STRUCT):
+        for dirpath, _dirs, files in os.walk(STRUCT):
+            for fl in sorted(files):
+                if not fl.endswith(".md") or fl == "_index.md":
+                    continue
+                total += 1
+                p = os.path.join(dirpath, fl)
+                with open(p, "r", encoding="utf-8") as f:
+                    text = f.read()
+                if _SOURCE_RE.search(text):
+                    deja += 1
+                    continue
+                with open(p, "a", encoding="utf-8") as f:
+                    f.write(_marqueurs_provenance(source, verifie))
+                etiquetees += 1
+    return {"ok": True, "total": total, "etiquetees": etiquetees, "deja": deja}
 
 
 # --------------------------------------------------------------------------- #
@@ -577,6 +686,11 @@ def _sas_candidat(item):
         "etage": item["etage"], "domain": item["domain"],
         "category": item["category"], "file": item["file"],
         "path": item["path"], "excerpt": item["excerpt"],
+        # ÉTIQUETAGE (extension du contrat sas) : la provenance est exposée sur
+        # CHAQUE candidat — le sas étiquette, il ne décote ni ne cache. La
+        # couverture d'étiquetage est de 100 % (tout candidat porte source+verifie).
+        "source": item.get("source", SOURCE_INTERNE),
+        "verifie": item.get("verifie", VERIFIE_DEFAUT),
         "_relevance": item.get("_relevance", 0.0),
         "_force": item.get("_force", 1.0),
         "_score": item.get("_score", 0.0),
@@ -798,6 +912,10 @@ class Handler(BaseHTTPRequestHandler):
             if not (data.get("content") or "").strip():
                 return self._send({"error": "champ 'content' requis"}, 400)
             return self._send(memorize(data))
+        if u.path == "/retro_tag":
+            return self._send(retro_tag_source(
+                (data.get("source") or SOURCE_INTERNE).strip() or SOURCE_INTERNE,
+                (data.get("verifie") or VERIFIE_DEFAUT).strip() or VERIFIE_DEFAUT))
         if u.path == "/maintenance":
             return self._send(maintenance(apply=bool(data.get("apply")),
                                           purge=bool(data.get("purge"))))

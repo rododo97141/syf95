@@ -70,6 +70,16 @@ import nexus_lecons   # journal de leçons + transfert (pointeur, RÉFÉRENCE)
 CATEGORIE = "criteres-kily"
 
 # --------------------------------------------------------------------------- #
+# Provenance d'une fiche (source / verifie) — LECTURE des marqueurs machine posés
+# par memory_api (même format : commentaires HTML en fin de fiche). Réplique
+# volontaire (comme _slug réplique slugify) : nexus_capital LIT, il n'écrit pas
+# memory_api. Absence => défaut (interne / non) : tout ce qui n'est pas
+# EXPLICITEMENT externe EST interne (miroir de memory_api._lire_provenance).
+# --------------------------------------------------------------------------- #
+_SOURCE_RE = re.compile(r"<!--\s*source:\s*(.*?)\s*-->")
+_VERIFIE_RE = re.compile(r"<!--\s*verifie:\s*(.*?)\s*-->")
+
+# --------------------------------------------------------------------------- #
 # N_JOURS_DETTE — fenêtre au-delà de laquelle une consultation fiche-unique NI
 # appliquée NI close-sans-dette bascule en DETTE. PROVISOIRE, même discipline
 # que PR 57 : ce n'est pas une valeur mesurée, c'est un point de départ.
@@ -101,6 +111,29 @@ def _dir_fiches(domaine):
 
 def _chemin_fiche(domaine, slug):
     return os.path.join(_dir_fiches(domaine), slug + ".md")
+
+
+def _provenance_fiche(slug):
+    """Lit (source, verifie) de la fiche criteres-kily `slug` là où rank()/
+    memory_api lisent réellement (structure/<dom>/criteres-kily/<slug>.md). Défaut
+    (interne, non) si la fiche est absente ou non étiquetée. LECTURE SEULE."""
+    struct = _dir_structure()
+    if os.path.isdir(struct):
+        cible = slug + ".md"
+        for dirpath, _dirs, files in os.walk(struct):
+            if os.path.basename(dirpath) != CATEGORIE:
+                continue
+            if cible in files:
+                try:
+                    text = open(os.path.join(dirpath, cible), encoding="utf-8").read()
+                except OSError:
+                    break
+                ms = _SOURCE_RE.search(text)
+                mv = _VERIFIE_RE.search(text)
+                source = (ms.group(1).strip() if ms else "interne") or "interne"
+                verifie = (mv.group(1).strip() if mv else "non") or "non"
+                return source, verifie
+    return "interne", "non"
 
 
 def _chemin_consultations():
@@ -136,7 +169,8 @@ def _now():
 # 1) capitaliser — écrit LA fiche (source unique) + un pointeur de leçon
 #    (RÉFÉRENCE : le slug, JAMAIS une copie de la réponse verbatim).
 # =========================================================================== #
-def capitaliser(question, reponse, contexte, domaine, pourquoi=None):
+def capitaliser(question, reponse, contexte, domaine, pourquoi=None,
+                source="interne", verifie="non"):
     """Écrit une fiche criteres-kily au format du corpus réel et un pointeur de
     leçon (référence au slug, aucune copie de contenu).
 
@@ -187,6 +221,14 @@ def capitaliser(question, reponse, contexte, domaine, pourquoi=None):
     ]
     if pourquoi:
         corps.append("\n### Pourquoi\n%s\n" % pourquoi)
+    # Provenance : marqueur machine en FIN de fiche (la 1re ligne reste le titre),
+    # écrit UNIQUEMENT hors défaut (source externe) → une fiche interne reste
+    # byte-identique à l'existant. Une fiche criteres-kily EXTERNE non certifiée
+    # verra sa force retrogradée par appliquer (garde source-consciente).
+    source = (source or "interne").strip() or "interne"
+    verifie = (verifie or "non").strip() or "non"
+    if source != "interne" or verifie != "non":
+        corps.append("\n<!-- source: %s -->\n<!-- verifie: %s -->\n" % (source, verifie))
     with open(chemin, "w", encoding="utf-8") as f:
         f.write("".join(corps))
 
@@ -353,13 +395,28 @@ def appliquer(consultation_id, fiche_retenue, resultat, tache, jeton=None):
 
     statut = _statut_force(resultat)   # succes|echec, ou lève
 
+    # --- GARDE FORCE SOURCE-CONSCIENTE : la force est un CRÉDIT-VÉRITÉ ----------
+    # appliquer lit la provenance de la fiche_retenue. Si elle vient d'une source
+    # EXTERNE (source != 'interne') NON certifiée par Kily (verifie != 'oui'), un
+    # 'succes' est RETROGRADÉ en statut 'ok' : INERTE (calculer_forces IGNORE
+    # 'ok'), la force NE MONTE PAS. 'echec' reste 'echec' (la force descend).
+    # L'asymétrie passe par le CHOIX du statut ÉMIS — nexus_force n'est JAMAIS
+    # touché. VOULU : ceci peut retrograder un succes jugé UTILE par Kily (le
+    # jeton reste consommé) — l'humain valide l'UTILITÉ, la garde protège le
+    # crédit-VÉRITÉ. Si Kily certifie la source (verifie='oui'), la retrogradation
+    # cesse (la fiche redevient un chemin de force plein).
+    source_f, verifie_f = _provenance_fiche(fiche_retenue)
+    retrograde = (statut == "succes" and source_f != "interne" and verifie_f != "oui")
+    statut_emis = "ok" if retrograde else statut
+
     # (b) le capteur : fiche=<slug>, statut compté par calculer_forces + jeton=<id>
     #     (champ structuré). C'est CE geste, adossé au jeton humain, qui rend la
     #     force vivante. Consommer = ce jeton apparaît désormais dans un event de
     #     force (aucune ré-émission possible : _jeton_deja_reference le verra).
+    #     Un statut RETROGRADÉ ('ok') consomme quand même le jeton (tracé, inerte).
     nexus_sense.log_event(
         tache=tache,
-        statut=statut,
+        statut=statut_emis,
         mode="assiste",
         fiche=fiche_retenue,
         note="capital: application d'un critère capitalisé",
@@ -367,6 +424,8 @@ def appliquer(consultation_id, fiche_retenue, resultat, tache, jeton=None):
     )
 
     # transfert : la leçon (référence au slug) réappliquée à une tâche nouvelle.
+    # Fondé sur le JUGEMENT humain d'utilité (statut), pas sur le crédit-force :
+    # la leçon ne nourrit pas calculer_forces (seul le capteur le fait).
     ns = _Namespace(
         lecon_cle=fiche_retenue,
         tache=tache,
@@ -380,7 +439,11 @@ def appliquer(consultation_id, fiche_retenue, resultat, tache, jeton=None):
         "ts": _now(),
         "fiche_retenue": fiche_retenue,   # figé
         "resultat": resultat,
-        "statut": statut,
+        "statut": statut_emis,            # statut RÉELLEMENT émis (retrogradé le cas échéant)
+        "statut_juge": statut,            # jugement humain (succes|echec) avant garde
+        "retrograde": retrograde,         # True si succes externe non-vérifié rendu inerte
+        "source": source_f,               # provenance lue de la fiche
+        "verifie": verifie_f,
         "tache": tache,
         "capteur_force": True,
         "jeton": jeton,                   # id du jeton consommé, figé avec la clôture

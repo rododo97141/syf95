@@ -308,6 +308,10 @@ def _valider_schema(resp):
             assert isinstance(c["excerpt"], str)
             assert c["domain"] is None or isinstance(c["domain"], str)
             assert c["category"] is None or isinstance(c["category"], str)
+            # Étiquetage de provenance (extension du contrat) : source + verifie
+            # présents sur CHAQUE candidat (couverture 100 %), jamais None.
+            assert isinstance(c["source"], str) and c["source"]
+            assert c["verifie"] in ("oui", "non")
             for k in ("_relevance", "_force", "_score"):
                 assert isinstance(c[k], (int, float)) and not isinstance(c[k], bool)
     assert resp["count"] == total

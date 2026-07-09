@@ -42,6 +42,10 @@ cand (chaque élément d'un bloc) :
   "file"       : str
   "path"       : str
   "excerpt"    : str
+  "source"     : str      (provenance : "interne" si produit par le système,
+                           sinon le nom d'une source EXTERNE — ÉTIQUETTE, jamais décote)
+  "verifie"    : str      ∈ { "oui", "non" }   (jugement de Kily par fiche ;
+                           défaut "non" = « source fiable, fait non confirmé »)
   "_relevance" : number   (score de pertinence IDF, NON strippé)
   "_force"     : number   (multiplicateur force, NON strippé)
   "_score"     : number   (_relevance × _force — le score de tri global, NON strippé)
@@ -57,6 +61,13 @@ entrée d'alerte :
 - **Séparation stricte** : pour chaque bloc, tout candidat vérifie
   `cand["etage"] == clé_du_bloc`. Un `en_attente` n'apparaît jamais dans le bloc
   `structure`, etc.
+- **Étiquetage de provenance** : tout candidat porte `source` et `verifie`
+  (couverture 100 %). Le sas **étiquette, il ne décote pas** : `source` et
+  `verifie` n'entrent PAS dans le classement (le tri reste `pertinence × force`
+  inchangé), ils informent seulement le consommateur de *ce qu'il regarde*. La
+  provenance **voyage** avec la fiche depuis le brut ; elle n'est jamais blanchie
+  à la promotion. Le **défaut** de `recall()` (sans `format=sas`) reste **inchangé
+  octet pour octet** : ces deux champs n'apparaissent QUE dans le format sas.
 - **Comparabilité** : les blocs sont des **sous-suites** du classement par
   défaut ; les scores exposés sont exactement ceux du classement global (aucun
   recalcul). Concaténés dans l'ordre `structure` → `en_attente` → `brut`, ils
