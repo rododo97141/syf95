@@ -304,8 +304,46 @@ def _sem(embedder, qvec, text):
         return 0.0
 
 
+# Queue de métadonnées d'un titre de fiche : « — domaine: X / catégorie: Y ».
+# Les fiches ont la forme `# <Titre> — domaine: X / catégorie: Y`. On coupe cette
+# queue pour ne garder que le TITRE (signal sémantique dense), jamais le
+# boilerplate. Tolère em-dash (—), en-dash (–) ou tiret (-) devant « domaine: ».
+_QUEUE_META_TITRE_RE = re.compile(r"\s*[—–-]\s*domaine\s*:.*$", re.IGNORECASE | re.DOTALL)
+
+
+def _titre_fiche(cand):
+    """TITRE de la fiche pour l'embedding sémantique : 1re ligne de titre markdown
+    de `cand['excerpt']` (ligne commençant par '#'), '#' retirés et queue de
+    métadonnées « — domaine: … / catégorie: … » COUPÉE. Le titre seul est un
+    signal plus dense que le texte complet tronqué (boilerplate dilué → mesuré
+    le 10/07 : recall@3 des reformulations synonymes 2/10 → 3/10, r@1 0 → 1).
+
+    Fallbacks DÉTERMINISTES si aucun titre — JAMAIS une chaîne vide, JAMAIS
+    d'exception : nom de fichier dé-sluggé (tirets → espaces, sans .md), puis
+    `_search` / `excerpt`."""
+    excerpt = cand.get("excerpt") or ""
+    for ligne in excerpt.splitlines():
+        s = ligne.strip()
+        if s.startswith("#"):
+            titre = _QUEUE_META_TITRE_RE.sub("", s.lstrip("#").strip()).strip()
+            if titre:
+                return titre
+            break  # ligne de titre présente mais vide après coupe → fallback
+    # Fallback 1 : nom de fichier dé-sluggé (tirets/underscores → espaces, sans .md).
+    fichier = cand.get("file") or ""
+    stem = fichier[:-3] if fichier.endswith(".md") else fichier
+    desslug = stem.replace("-", " ").replace("_", " ").strip()
+    if desslug:
+        return desslug
+    # Fallback 2 : texte de recherche / excerpt — jamais vide au-delà de ça.
+    return cand.get("_search") or excerpt or ""
+
+
 def _texte_fiche(cand):
-    return cand.get("_search") or cand.get("excerpt") or ""
+    """Texte embarqué pour l'embedding sémantique : le TITRE SEUL (dense), PAS le
+    texte complet tronqué (`_search`, dilué par le boilerplate). Utilisé UNIQUEMENT
+    sur le chemin embedder — le défaut lexical (embedder=None) reste byte-identique."""
+    return _titre_fiche(cand)
 
 
 def rank(query, candidates, forces=None, embedder=None,

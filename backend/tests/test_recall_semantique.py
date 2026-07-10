@@ -220,13 +220,20 @@ def test_A5_modele_absent_en_local_leve_renvoie_none_sans_reseau(nemb, monkeypat
 # =========================================================================== #
 def _corpus_sens(m):
     """Une cible récupérable par le SENS (zéro token commun avec la requête, mais
-    proche par n-grammes) + une fiche lexicale + du bruit lointain."""
+    proche par n-grammes) + une fiche lexicale + du bruit lointain.
+
+    Depuis recall v0.1, l'embedding porte sur le TITRE de la fiche (pas le texte
+    complet tronqué). Le signal sémantique vit donc dans la 1re ligne de titre
+    markdown, à la forme réelle des fiches : `# <Titre> — domaine: X / catégorie: Y`."""
     _fiche(m, "dom", "cat", "cible",
-           "Guide de reformulation des interrogations complexes")
+           "# Guide de reformulation des interrogations complexes — "
+           "domaine: dom / catégorie: cat\n> Créé le 21/06/2026\n\ncorps de fiche\n")
     _fiche(m, "dom", "cat", "lexicale",
-           "reformuler une interrogation rapidement projet")
+           "# reformuler une interrogation rapidement projet — "
+           "domaine: dom / catégorie: cat\n> Créé le 21/06/2026\n\ncorps\n")
     _fiche(m, "dom", "cat", "bruit",
-           "recette de cuisine tarte aux pommes sucre")
+           "# recette de cuisine tarte aux pommes sucre — "
+           "domaine: dom / catégorie: cat\n> Créé le 21/06/2026\n\ncorps\n")
 
 
 def test_B1_defaut_sans_flag_ignore_embedder_byte_identique(mem, nf):

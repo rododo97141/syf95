@@ -156,11 +156,14 @@ def test_retrocompat_defaut_embedder_none(nf, mem):
 def test_gain_semantique_elargit_les_candidats(nf, mem):
     # fiche cible : AUCUN token entier partagé avec la requête, mais très proche
     # par n-grammes de caractères (reformulation/reformuler, interrogations/-tion).
+    # Recall v0.1 embarque le TITRE : le signal sémantique vit dans la ligne '#'.
     _fiche(mem, "dom", "cat", "cible",
-           "Guide de reformulation des interrogations complexes")
+           "# Guide de reformulation des interrogations complexes — "
+           "domaine: dom / catégorie: cat\n> Créé le 21/06/2026\n\ncorps\n")
     # bruit : ni lexical ni proche par n-grammes
     _fiche(mem, "dom", "cat", "bruit",
-           "recette de cuisine tarte aux pommes sucre")
+           "# recette de cuisine tarte aux pommes sucre — "
+           "domaine: dom / catégorie: cat\n> Créé le 21/06/2026\n\ncorps\n")
 
     query = "reformuler une interrogation"
     corpus = _cands(mem, query)
@@ -281,9 +284,13 @@ def test_bornes_tous_signaux_dans_0_1(nf, mem):
 # 6. ROBUSTESSE : embedder cassé → dégradation propre vers le lexical seul
 # --------------------------------------------------------------------------- #
 def test_robustesse_embedder_defaillant_degrade_sans_crash(nf, mem):
-    _fiche(mem, "dom", "cat", "a", "alpha beta gamma projet")
-    _fiche(mem, "dom", "cat", "b", "beta gamma delta budget")
-    _fiche(mem, "dom", "cat", "c", "projet budget final")
+    # Recall v0.1 embarque le TITRE : chaque fiche porte sa ligne '#' réelle.
+    _fiche(mem, "dom", "cat", "a",
+           "# alpha beta gamma projet — domaine: dom / catégorie: cat\ncorps\n")
+    _fiche(mem, "dom", "cat", "b",
+           "# beta gamma delta budget — domaine: dom / catégorie: cat\ncorps\n")
+    _fiche(mem, "dom", "cat", "c",
+           "# projet budget final — domaine: dom / catégorie: cat\ncorps\n")
     query = "projet budget"
     cands = _cands(mem, query)
 
