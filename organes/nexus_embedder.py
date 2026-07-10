@@ -11,6 +11,12 @@ FABRIQUE un embedder : si un modèle de phrases LOCAL est présent dans
 l'environnement (sentence-transformers, poids déjà sur disque), `charger_embedder`
 renvoie un embedder prêt à injecter dans `nexus_force.rank(..., embedder=...)`.
 
+L'invariant NEXUS « réseau JAMAIS dans l'organe » est APPLIQUÉ, pas seulement
+affirmé : le chargement passe `local_files_only=True`. Un modèle absent en local
+LÈVE (jamais un téléchargement HuggingFace furtif) -> attrapé -> None -> repli
+lexical. Impossible, même bibliothèque installée sans cache, qu'un premier recall
+sémantique déclenche un appel réseau.
+
 SINON — bibliothèque absente, poids introuvables, chargement en échec — il renvoie
 `None`. `None` veut dire UNE seule chose côté recall : FALLBACK = LEXICAL PUR.
 
@@ -119,8 +125,12 @@ def charger_embedder(nom=None, avec_cache=True):
     except Exception:
         return None  # bibliothèque absente -> LEXICAL PUR (jamais n-grammes)
     try:
-        modele = SentenceTransformer(nom)          # charge un modèle LOCAL, sans réseau
+        # local_files_only=True APPLIQUE l'invariant « réseau jamais dans l'organe » :
+        # un modèle ABSENT localement LÈVE (pas de repli sur un téléchargement
+        # HuggingFace) -> attrapé ici -> None -> repli lexical. Le réseau ne peut
+        # PAS s'inviter dans le chemin de chargement, même lib installée sans cache.
+        modele = SentenceTransformer(nom, local_files_only=True)
     except Exception:
-        return None  # poids introuvables / chargement en échec -> LEXICAL PUR
+        return None  # poids absents en local / chargement en échec -> LEXICAL PUR
     emb = _EmbedderLocal(modele, _version_modele(nom))
     return CacheEmbeddings(emb) if avec_cache else emb

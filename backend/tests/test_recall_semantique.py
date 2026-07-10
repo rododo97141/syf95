@@ -163,6 +163,58 @@ def test_A3_cache_invalide_au_changement_de_contenu_et_transparent(nemb):
     assert autre != froid
 
 
+def _faux_sentence_transformers(constructeur):
+    """Faux module `sentence_transformers` injectable via sys.modules, dont
+    l'attribut SentenceTransformer est `constructeur`."""
+    import types
+    mod = types.ModuleType("sentence_transformers")
+    mod.SentenceTransformer = constructeur
+    mod.__version__ = "test-9.9"
+    return mod
+
+
+def test_A4_chargement_local_files_only_applique(nemb, monkeypatch):
+    """GARDIEN de l'invariant « réseau jamais dans l'organe ».
+    MUTATION : retirer local_files_only=True (ou le mettre à False) -> ROUGE.
+    Le chargement du modèle DOIT passer local_files_only=True."""
+    vu = {}
+
+    class FauxST:
+        def __init__(self, nom, **kwargs):
+            vu["nom"] = nom
+            vu["kwargs"] = kwargs
+
+        def encode(self, text, **k):
+            return [0.0, 1.0, 0.0]
+
+    monkeypatch.setitem(sys.modules, "sentence_transformers",
+                        _faux_sentence_transformers(FauxST))
+    emb = nemb.charger_embedder()
+    assert emb is not None                            # modèle « présent » -> embedder
+    assert vu["kwargs"].get("local_files_only") is True, \
+        "SentenceTransformer doit être chargé avec local_files_only=True"
+
+
+def test_A5_modele_absent_en_local_leve_renvoie_none_sans_reseau(nemb, monkeypatch):
+    """Un modèle ABSENT localement (le chargement local_files_only=True LÈVE) fait
+    renvoyer None -> repli lexical, JAMAIS une tentative réseau. Toute construction
+    SANS local_files_only compterait comme une tentative réseau interdite."""
+    compte = {"reseau": 0}
+
+    class FauxSTabsent:
+        def __init__(self, nom, **kwargs):
+            if kwargs.get("local_files_only"):
+                raise OSError("modèle introuvable en local")   # absent -> LÈVE
+            # une construction sans local_files_only = bascule réseau interdite
+            compte["reseau"] += 1
+
+    monkeypatch.setitem(sys.modules, "sentence_transformers",
+                        _faux_sentence_transformers(FauxSTabsent))
+    emb = nemb.charger_embedder()
+    assert emb is None                                # repli LEXICAL PUR
+    assert compte["reseau"] == 0                      # AUCUNE tentative réseau
+
+
 # =========================================================================== #
 # B. RECALL opt-in — plomberie avec embedder MOCK déterministe
 # =========================================================================== #
