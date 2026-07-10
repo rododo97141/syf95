@@ -5,6 +5,18 @@
     {
       "nom": "Agent-Memory-Paper-List",
       "note": "Boussole du champ mémoire-d'agents : bibliographie de recherche (GitHub Shichun-Liu/Agent-Memory-Paper-List) tenue par des chercheurs, index vers sources primaires. Fiable comme CARTE, pas comme vérité en soi -> verifie=non. 1re source, graine de NOTRE carte serrurier (Shu Ha Ri) ; chaque entrée reste ancrée à sa source réelle (pont, pas miroir)."
+    },
+    {
+      "nom": "TrustFlow-reputation-vectorielle",
+      "note": "arXiv 2603.19452 — réputation VECTORIELLE par domaine (fort ici / faible là) au lieu d'un scalaire ; graine de la force-par-dimensions du journal de scout. Fiable comme piste d'ingénierie, PAS comme vérité -> verifie=non."
+    },
+    {
+      "nom": "AgentCity-gouvernance-constitutionnelle",
+      "note": "arXiv 2604.07007 — gouvernance constitutionnelle par séparation des pouvoirs : les agents légifèrent des règles, un logiciel exécute, l'humain adjuge. Recoupe valeurs=constitution + Créateur dernier mot. verifie=non."
+    },
+    {
+      "nom": "Judging-with-Many-Minds",
+      "note": "arXiv 2505.19477 — un jury multi-agent peut AMPLIFIER le biais au lieu de le réduire ; garde-fou team OU solo, préserver la dissidence. Contre-preuve utile pour notre jury. verifie=non."
     }
   ]
 }
