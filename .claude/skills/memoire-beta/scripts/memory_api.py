@@ -856,6 +856,131 @@ def _strip_internal(item):
 
 
 # --------------------------------------------------------------------------- #
+# RECALL SÉMANTIQUE — mode OPT-IN (embedder LOCAL injecté), étiquetant, jamais
+# décotant. Le DÉFAUT (sans flag) reste le lexical byte-identique historique.
+# ---------------------------------------------------------------------------
+# Le sémantique COMPLÈTE le lexical : il rouvre le jeu candidat (des fiches
+# proches par le SENS mais sans mot commun remontent) et il EXPOSE la décomposition
+# du score. Il ne remplace pas le lexical (alpha <= 0.5) et n'écrit JAMAIS dans la
+# force. Toute la machinerie multi-signaux vit dans nexus_force.rank : recall lui
+# passe l'embedder injecté + semantique_ouvre_candidats=True et ne fait que garder
+# / étiqueter le résultat. La formule de fusion N'EST PAS refaite ici.
+# --------------------------------------------------------------------------- #
+_MODE_SEMANTIQUE_VRAI = ("1", "true", "vrai", "oui", "yes", "on", "semantique", "semantic")
+
+
+def _mode_semantique(params):
+    """Lit le flag opt-in du mode sémantique dans les paramètres HTTP (listes).
+    Reconnu via `semantique=1` (ou vrai/oui/on…) OU `mode=semantique`. Absent =>
+    False => chemin lexical par DÉFAUT, byte-identique (le flag ne fuit jamais)."""
+    for v in params.get("semantique", []):
+        if str(v).strip().lower() in _MODE_SEMANTIQUE_VRAI:
+            return True
+    for v in params.get("mode", []):
+        if str(v).strip().lower() in ("semantique", "semantic"):
+            return True
+    return False
+
+
+def _charger_nexus_force():
+    """Import PARESSEUX de nexus_force (organes/). Chargé UNIQUEMENT sur le chemin
+    sémantique opt-in : le chemin lexical par défaut n'acquiert AUCUNE dépendance
+    nouvelle (garantie byte-identique). Ajoute organes/ au sys.path car nexus_force
+    importe nexus_sense en frère."""
+    import sys
+    racine = os.path.dirname(os.path.dirname(os.path.dirname(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))))))
+    org = os.path.join(racine, "organes")
+    if org not in sys.path:
+        sys.path.insert(0, org)
+    import nexus_force
+    return nexus_force
+
+
+_EMBEDDER_SERVEUR = {"charge": False, "embedder": None}
+
+
+def _embedder_injecte():
+    """Embedder LOCAL injecté par le SERVEUR HTTP pour le mode sémantique. Chargé
+    UNE fois via la fabrique nexus_embedder (modèle local si présent, SINON None
+    -> repli lexical). memory_api n'embarque aucun modèle ; il branche la fabrique
+    exactement comme il brancherait un client LLM. Toute défaillance -> None."""
+    if not _EMBEDDER_SERVEUR["charge"]:
+        _EMBEDDER_SERVEUR["charge"] = True
+        try:
+            import sys
+            racine = os.path.dirname(os.path.dirname(os.path.dirname(
+                os.path.dirname(os.path.dirname(os.path.abspath(__file__))))))
+            org = os.path.join(racine, "organes")
+            if org not in sys.path:
+                sys.path.insert(0, org)
+            import nexus_embedder
+            _EMBEDDER_SERVEUR["embedder"] = nexus_embedder.charger_embedder()
+        except Exception:
+            _EMBEDDER_SERVEUR["embedder"] = None
+    return _EMBEDDER_SERVEUR["embedder"]
+
+
+def _strip_semantique(item, alpha, seuil):
+    """Forme de retour d'un candidat en mode sémantique : la forme publique + la
+    DÉCOMPOSITION du score (rel_n, sem, alpha, pert) TOUJOURS exposée — le
+    consommateur voit comment le score s'est formé, jamais une boîte noire.
+
+    « remontée par le SENS » = recouvrement lexical ZÉRO (_relevance==0) mais
+    proximité sémantique au-dessus du seuil d'élargissement. Ces fiches sont
+    MARQUÉES (jamais décotées ni cachées : patron sas) : sans le sémantique elles
+    seraient invisibles (le lexical les jette), le mode les rend ET les signale."""
+    rel = item.get("_relevance", 0.0)
+    sem = item.get("_sem", 0.0)
+    par_le_sens = (rel == 0.0 and sem >= seuil)
+    out = {
+        "etage": item["etage"], "domain": item["domain"],
+        "category": item["category"], "file": item["file"],
+        "path": item["path"], "excerpt": item["excerpt"],
+        # DÉCOMPOSITION transparente du score (jamais fondue).
+        "_relevance": rel,
+        "_rel_n": item.get("_rel_n", 0.0),
+        "_sem": sem,
+        "alpha": alpha,
+        "_pert": item.get("_pert", 0.0),
+        "_force": item.get("_force", 1.0),
+        "_score": item.get("_score", 0.0),
+        "remontee_par_le_sens": par_le_sens,
+    }
+    if par_le_sens:
+        # MARQUE explicite (étiqueter, jamais décoter). « aucun mot commun » est
+        # LITTÉRAL : _relevance==0 <=> aucun token de la requête dans la fiche.
+        out["marque"] = ("remontée par le sens, cos=%.4f, aucun mot commun" % sem)
+    return out
+
+
+def _recall_semantique(query, scope, results, embedder):
+    """Route le recall par nexus_force.rank avec l'embedder INJECTÉ et
+    l'élargissement sémantique. Garde les fiches lexicales (rel>0) ET les fiches
+    récupérées par le SENS (rel==0 mais sem>=seuil), écarte le bruit sous le seuil.
+    Fonction PURE (aucune écriture ; les forces sont LUES depuis memory_api, jamais
+    écrites — le recall n'écrit JAMAIS dans la force)."""
+    nf = _charger_nexus_force()
+    forces = load_forces()                              # LECTURE seule des forces
+    alpha = min(0.5, nf.POIDS_SEMANTIQUE_DEFAUT)        # alpha <= 0.5 : le sens COMPLÈTE
+    seuil = nf.SEUIL_ELARGISSEMENT_DEFAUT
+    ranked = nf.rank(query, results, forces=forces, embedder=embedder,
+                     poids_semantique=alpha,
+                     semantique_ouvre_candidats=True,
+                     seuil_semantique_elargissement=seuil,
+                     corpus=results)
+    gardes = []
+    for r in ranked:
+        rel = r.get("_relevance", 0.0)
+        sem = r.get("_sem", 0.0)
+        if rel > 0.0 or sem >= seuil:                   # lexical OU sens ; sinon bruit
+            gardes.append(_strip_semantique(r, alpha, seuil))
+    return {"ok": True, "scope": scope, "mode": "semantique",
+            "embedder": "injecte", "alpha": alpha, "seuil_elargissement": seuil,
+            "count": len(gardes), "results": gardes}
+
+
+# --------------------------------------------------------------------------- #
 # SAS mémoire (opt-in format=sas) — étiqueter, jamais cacher ni décoter
 # --------------------------------------------------------------------------- #
 # Le sas ne recalcule RIEN et ne reclasse RIEN : il prend le classement GLOBAL
@@ -947,10 +1072,19 @@ def _format_sas(scope, results):
             "blocs": blocs, "alerte": alerte or None}
 
 
-def recall(params):
+def recall(params, embedder=None):
+    """Rappel de la mémoire. DÉFAUT (sans flag `semantique`) = lexical
+    byte-identique historique. `embedder` est INJECTÉ (comme le client LLM),
+    jamais fabriqué ici ; il n'entre en jeu QUE si le flag opt-in est présent.
+
+    Mode sémantique opt-in (flag `semantique`/`mode=semantique`) :
+      • embedder injecté  -> nexus_force.rank + élargissement + décomposition ;
+      • embedder absent    -> FALLBACK LEXICAL PUR (jamais n-grammes), signalé.
+    """
     query = (params.get("query", [""])[0] or "").lower()
     scope = (params.get("scope", ["all"])[0] or "all").lower()
     fmt = (params.get("format", [""])[0] or "").lower()
+    semantique = _mode_semantique(params)
     fdomain = params.get("domain", [None])[0]
     fcategory = params.get("category", [None])[0]
     fdomain = slugify(fdomain) if fdomain else None
@@ -965,8 +1099,19 @@ def recall(params):
     if scope == "archive" and not fdomain and not fcategory:
         results += _scan(ARCHIVE, query, "archive")
     if query:
+        # --- Mode sémantique OPT-IN (embedder injecté) : chemin distinct. ---
+        if semantique and embedder is not None:
+            return _recall_semantique(query, scope, results, embedder)
         ranked = rank_candidates(query, results)
         results = [r for r in ranked if r["_relevance"] > 0]
+        # --- Mode demandé mais AUCUN embedder local -> REPLI LEXICAL PUR. ---
+        # Résultats IDENTIQUES au lexical (jamais un pseudo-sémantique n-grammes) ;
+        # seule l'enveloppe le signale honnêtement (transparence du repli).
+        if semantique:
+            out = [_strip_internal(r) for r in results]
+            return {"ok": True, "scope": scope, "mode": "semantique",
+                    "embedder": "absent", "fallback": "lexical",
+                    "count": len(out), "results": out}
     if fmt == "sas":
         return _format_sas(scope, results)
     out = [_strip_internal(r) for r in results]
@@ -1086,7 +1231,8 @@ class Handler(BaseHTTPRequestHandler):
         if u.path == "/staging":
             return self._send(list_staging())
         if u.path == "/recall":
-            return self._send(recall(params))
+            emb = _embedder_injecte() if _mode_semantique(params) else None
+            return self._send(recall(params, embedder=emb))
         if u.path == "/stats":
             return self._send(stats())
         if u.path == "/maintenance":
