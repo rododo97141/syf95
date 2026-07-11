@@ -407,6 +407,9 @@ def test_T6_enumeration_des_appelants_de_recall():
         "organes/nexus_98.py",                           # /recall?domain=&category= (structure)
         ".claude/skills/expert-98/scripts/nexus_98.py",  # idem (miroir skill)
         "organes/nexus_consolidate.py",                  # /recall?domain=&category= (structure)
+        "organes/nexus_supersession_scout.py",           # /recall?domain=&category= (structure) —
+                                                         # scout LECTURE SEULE : PROPOSE des candidats
+                                                         # à la supersession, n'agit JAMAIS
         "organes/nexus_organize.py",                     # /recall?scope=brut
         # --- OUTIL de mesure LECTURE SEULE (banc recall reproductible) : appelle
         #     recall en défaut lexical byte-identique + sémantique opt-in, sur un
