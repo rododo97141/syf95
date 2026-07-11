@@ -11,7 +11,7 @@ qu'il surveille pourrait être corrompu par elle).
 
 Usage : python3 nexus_98.py
 """
-import json, urllib.request, itertools, re, glob, os, sys
+import json, urllib.request, itertools, re, glob, os, sys, math
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 if SCRIPT_DIR not in sys.path:
@@ -634,6 +634,86 @@ def mots(t):
 def jaccard(a, b):
     return len(a & b) / len(a | b) if a and b else 0.0
 
+
+def cosinus(a, b):
+    """Cosinus PUR borné [0,1]. Dimensions incompatibles, vecteur nul ou toute
+    anomalie → 0.0 (jamais d'exception : le sémantique ne doit JAMAIS faire
+    tomber 98). Négatif borné à 0 : deux fiches ne peuvent pas être « moins que
+    dissemblables »."""
+    try:
+        if len(a) != len(b):
+            return 0.0
+        dot = sum(x * y for x, y in zip(a, b))
+        na = math.sqrt(sum(x * x for x in a))
+        nb = math.sqrt(sum(y * y for y in b))
+        if na == 0.0 or nb == 0.0:
+            return 0.0
+        v = dot / (na * nb)
+        return 0.0 if v < 0.0 else (1.0 if v > 1.0 else v)
+    except Exception:
+        return 0.0
+
+
+# --------------------------------------------------------------------------- #
+# SIGNAL 2 — REDONDANCE HONNÊTE (fonction PURE, LECTURE SEULE, ne lève JAMAIS).
+# Deux corrections d'un signal DOUBLEMENT aveugle :
+#   (1) COUVERTURE COMPLÈTE : compte TOUTES les catégories (plus de `break` qui
+#       ne mesurait qu'UNE catégorie par domaine) ;
+#   (2) SÉMANTIQUE OPT-IN : au-delà du lexical (jaccard des mots, qui rate les
+#       doublons de SENS), un embedder INJECTÉ fait aussi compter les paires
+#       proches par le sens (cos(vecteurs) ≥ seuil_sem).
+# INTRA-CATÉGORIE only : jamais de paire CROSS-catégorie (deux fiches de deux
+# catégories différentes ne sont PAS une redondance). HONNÊTE : sans embedder,
+# `semantique` = 0 et le mode annoncé est « lexical seul » — jamais un faux score.
+# --------------------------------------------------------------------------- #
+def compter_redondances(groupes, embedder=None, seuil_lex=0.50, seuil_sem=0.80):
+    """Compte les paires REDONDANTES, PAR CATÉGORIE (intra-cat, jamais cross-cat).
+
+    `groupes` : dict (domaine, categorie) → liste de fiches {file, excerpt/_search,
+    vecteur optionnel}. Pour chaque catégorie, toutes les paires (itertools.
+    combinations) sont testées ; une paire est redondante si :
+        jaccard(mots) ≥ seuil_lex   (lexicale, toujours)
+      OU embedder != None ET cosinus(vecteurs) ≥ seuil_sem   (sémantique, opt-in)
+
+    Renvoie {total, lexical, semantique} — partition NON chevauchante :
+      • lexical    = paires attrapées par les MOTS (jaccard ≥ seuil_lex) ;
+      • semantique = paires attrapées SEULEMENT par le SENS (cos ≥ seuil_sem mais
+                     jaccard < seuil_lex) — les doublons cachés que le lexical rate ;
+      • total      = lexical + semantique.
+    Sans embedder (None), `semantique` = 0 : lexical COMPLET honnête, jamais un
+    faux score. PURE : aucune écriture, aucun réseau (embedder déjà chargé).
+    DÉFENSIVE : toute anomalie (groupes mauvais, fiche non-dict, embedder qui
+    défaille sur une paire) → cette paire retombe au lexical, jamais d'exception."""
+    total = lexical = semantique = 0
+    try:
+        items = list((groupes or {}).items())
+    except Exception:
+        return {"total": 0, "lexical": 0, "semantique": 0}
+    for _cle, fiches in items:
+        fl = fiches if isinstance(fiches, (list, tuple)) else []
+        prepares = []
+        for f in fl:
+            if not isinstance(f, dict):
+                continue
+            texte = (f.get("file", "") or "") + " " + (f.get("excerpt") or f.get("_search") or "")
+            prepares.append((mots(texte), f.get("vecteur")))
+        for (ma, va), (mb, vb) in itertools.combinations(prepares, 2):
+            lex = jaccard(ma, mb) >= seuil_lex
+            sem = False
+            if embedder is not None and va is not None and vb is not None:
+                try:
+                    sem = cosinus(va, vb) >= seuil_sem
+                except Exception:
+                    sem = False
+            if lex:
+                lexical += 1
+                total += 1
+            elif sem:                      # attrapée SEULEMENT par le sens
+                semantique += 1
+                total += 1
+    return {"total": total, "lexical": lexical, "semantique": semantique}
+
+
 def main():
     try:
         stats = get("/stats")
@@ -649,19 +729,44 @@ def main():
     # Signal 1 — saturation mémoire
     sat_danger = remplissage >= 50
 
-    # Signal 2 — redondance (gonflement = douleur)
-    redondances = 0
+    # Signal 2 — redondance (gonflement = douleur). COUVERTURE COMPLÈTE (TOUTES
+    # les catégories, plus de `break` qui n'en mesurait qu'UNE par domaine) +
+    # SÉMANTIQUE OPT-IN honnête (embedder LOCAL, réseau JAMAIS). L'embedder est
+    # chargé DÉFENSIVEMENT : absent/défaillant → None → lexical COMPLET, 98 ne
+    # tombe pas et n'annonce jamais un faux score sémantique.
+    embedder = None
+    try:
+        import nexus_embedder
+        embedder = nexus_embedder.charger_embedder()
+    except Exception:
+        embedder = None
+    try:
+        import nexus_force
+    except Exception:
+        nexus_force = None
+        embedder = None    # sans _titre_fiche, pas de vecteur fiable → lexical complet
+
+    groupes = {}
     for dom, cats in domains.items():
-        for cat, fl in cats.items():
-            sigs = []
-            for f in fl:
+        for cat in cats:
+            try:
                 res = get(f"/recall?domain={dom}&category={cat}").get("results", [])
-                for r in res:
-                    sigs.append(mots(r.get("file","") + " " + r.get("excerpt","")))
-            for a, b in itertools.combinations(sigs, 2):
-                if jaccard(a, b) >= 0.50:   # seuil relevé : ne signaler que les VRAIS doublons
-                    redondances += 1
-            break  # 1 échantillon de catégorie par domaine suffit pour la jauge v0.1
+            except Exception:
+                res = []
+            fiches_grp = []
+            for r in res:
+                f = {"file": r.get("file", ""), "excerpt": r.get("excerpt", "")}
+                if embedder is not None and nexus_force is not None:
+                    try:
+                        f["vecteur"] = embedder.embed(nexus_force._titre_fiche(f))
+                    except Exception:
+                        pass   # embedder défaillant sur cette fiche → lexical seul pour elle
+                fiches_grp.append(f)
+            groupes[(dom, cat)] = fiches_grp
+
+    red = compter_redondances(groupes, embedder=embedder)
+    redondances = red["total"]
+    mode_red = "lexical seul" if embedder is None else "lexical + sémantique"
     red_danger = redondances >= 3
 
     # Signal 3 — limites non résolues (les « douleurs » du système)
@@ -674,7 +779,8 @@ def main():
     print("🛡️  NEXUS-98 — GARDIEN (veille pour protéger)")
     print("   (hors boucle — observe l'organisme lui-même)\n")
     print(f"   Mémoire : {fiches}/{cap} ({remplissage:.0f}% rempli)")
-    print(f"   Redondance détectée : {redondances} paire(s) (jauge v0.1)")
+    print(f"   Redondance : {redondances} paire(s) — {red['lexical']} par les mots, "
+          f"{red['semantique']} par le sens (mode : {mode_red})")
     print(f"   Limites enregistrées (douleurs) : {nb_limites}")
     print(f"   File en_attente : {en_attente}\n")
 
