@@ -526,28 +526,68 @@ def bilan_promotion():
 #     source (jamais blanchie). Un externe non étiqueté = une fuite d'étiquette.
 # Le binaire de solipsisme dérive de source == 'interne' EXACT : une source
 # nommée 'interne-x' (ou toute autre) compte EXTERNE (jamais un startswith).
+#
+# DEUX VUES du solipsisme, un seul binaire STRICT pour les fuites :
+#   • est_interne (STRICT) — sert la détection de fuites ET le ratio par défaut.
+#     Un externe SANS étiquette reste une FUITE : on ne le blanchit jamais.
+#   • est_interne_ou_defaut (opt-in via ratio_solipsisme(defaut_interne=True)) —
+#     vue « solipsisme sur toute la mémoire » où l'ABSENT (None/'') vaut le
+#     DÉFAUT DE LECTURE documenté 'interne'. FAIL-SAFE : ne peut que MONTER le
+#     solipsisme (absent→interne), jamais fabriquer une fausse diversité (un
+#     0 % faux lu sur des legacy non tagués). RÉSERVÉ au diagnostic : ce mode ne
+#     touche NI couverture_etiquetage NI digue_ingestion, qui restent STRICTES.
 # --------------------------------------------------------------------------- #
 def est_interne(source):
     """True SSI la source est EXACTEMENT 'interne'. Égalité stricte (JAMAIS un
-    startswith) : 'interne-x' est une source EXTERNE, pas une variante d'interne."""
+    startswith) : 'interne-x' est une source EXTERNE, pas une variante d'interne.
+
+    STRICT PAR CONCEPTION — ne PAS assouplir : la détection de fuites
+    (couverture_etiquetage / digue_ingestion) en dépend. Un externe SANS
+    étiquette (source absente) DOIT rester une FUITE ici, jamais un interne."""
     return source == "interne"
 
 
-def ratio_solipsisme(candidats):
+def est_interne_ou_defaut(source):
+    """PUR. Vue « solipsisme sur toute la mémoire » : l'ABSENT (None / '') vaut
+    le DÉFAUT DE LECTURE documenté 'interne' (une fiche legacy non taguée est,
+    par défaut de lecture résolu, interne). Une source NON VIDE reste EXACTE :
+    JAMAIS un startswith — 'interne-x' → False, 'web' → False.
+
+    À N'UTILISER que pour le DIAGNOSTIC de solipsisme (opt-in), JAMAIS pour la
+    détection de fuites : absorber un externe sans tag en interne masquerait une
+    fuite. Ce helper ne remplace donc PAS est_interne, il le complète."""
+    return source in (None, "", "interne")
+
+
+def ratio_solipsisme(candidats, defaut_interne=False):
     """DIAGNOSTIC (jamais un objectif) : part des fiches internes. `candidats` =
     liste de dicts portant 'source'. Défensif : entrée non-liste → dict neutre.
-    Le ratio est OBSERVÉ, pas piloté (anti-Goodhart)."""
+    Le ratio est OBSERVÉ, pas piloté (anti-Goodhart).
+
+    `defaut_interne` (opt-in, False par DÉFAUT) :
+      • False → binaire est_interne STRICT = comportement ACTUEL, BYTE-IDENTIQUE
+        (une source absente compte EXTERNE ; le retour NE porte PAS le champ
+        'defaut_interne' — le défaut reste strictement inchangé).
+      • True → binaire est_interne_ou_defaut : l'ABSENT (None/'') compte INTERNE,
+        la vue « solipsisme sur toute la mémoire » qui ne peut plus lire un 0 %
+        faux sur des legacy non tagués. FAIL-SAFE : ce mode ne peut que MONTER le
+        solipsisme (absent→interne), JAMAIS le baisser. Ajoute alors le champ
+        'defaut_interne': True au retour."""
     cands = candidats if isinstance(candidats, (list, tuple)) else []
     total = len(cands)
-    interne = sum(1 for c in cands if isinstance(c, dict) and est_interne(c.get("source")))
+    predicat = est_interne_ou_defaut if defaut_interne else est_interne
+    interne = sum(1 for c in cands if isinstance(c, dict) and predicat(c.get("source")))
     externe = total - interne
-    return {
+    resultat = {
         "total": total,
         "interne": interne,
         "externe": externe,
         "ratio_interne": (interne / total) if total else None,
         "_note": "diagnostic anti-Goodhart : observé, jamais posé en objectif",
     }
+    if defaut_interne:
+        resultat["defaut_interne"] = True
+    return resultat
 
 
 def couverture_etiquetage(candidats):
