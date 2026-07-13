@@ -216,8 +216,9 @@ def signaux_jointure(cap, registre):
 # --------------------------------------------------------------------------- #
 def garde_discrimination_force(events, file=None):
     """Fonction PURE. Depuis les `events` de force (applications capteur_force=True
-    portant un statut_juge ∈ {succes, echec}), compte succès/échec + taux d'échec,
-    et rend un verdict de tampon :
+    portant un statut_juge ∈ {succes, echec} — ou, pour les events LEGACY sans
+    statut_juge, un `statut` ∈ {succes, echec}), compte succès/échec + taux
+    d'échec, et rend un verdict de tampon :
 
       • « jury tamponneur » si total ≥ FORCE_JUGE_SEUIL_MIN ET echec == 0 — sur un
         échantillon suffisant, un juge sans un SEUL échec ne discrimine plus ;
@@ -232,7 +233,13 @@ def garde_discrimination_force(events, file=None):
         try:
             if not e.get("capteur_force"):
                 continue
+            # statut_juge = le jugement humain (avant retrogradation). Repli sur
+            # `statut` pour les events LEGACY d'avant l'ajout de statut_juge. On ne
+            # compte QUE si la valeur retenue ∈ {succes, echec} : un 'ok'/'partiel'
+            # (inerte, ignoré par calculer_forces) n'entre JAMAIS dans le compte.
             sj = e.get("statut_juge")
+            if sj is None:
+                sj = e.get("statut")
             if sj == "succes":
                 succes += 1
             elif sj == "echec":

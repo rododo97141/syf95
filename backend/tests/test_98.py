@@ -246,3 +246,21 @@ def test_garde_ne_compte_que_les_events_de_force_juges(tmp_path, monkeypatch):
     r = g.garde_discrimination_force(events)
     assert r["total"] == 5 and r["echec"] == 0     # les 3 parasites ignorés
     assert "tamponneur" in r["alerte"]
+
+
+def test_garde_event_legacy_sans_statut_juge_se_rabat_sur_statut(tmp_path, monkeypatch):
+    """Event LEGACY (d'avant l'ajout de statut_juge) : capteur_force=True SANS
+    statut_juge → on se rabat sur `statut`. Un statut 'succes' compte pour 1 succès."""
+    g = _setup(tmp_path, monkeypatch)
+    legacy = {"type": "application", "capteur_force": True, "statut": "succes"}
+    r = g.garde_discrimination_force([legacy])
+    assert r["total"] == 1 and r["succes"] == 1 and r["echec"] == 0
+
+
+def test_garde_event_legacy_statut_ok_inerte_non_compte(tmp_path, monkeypatch):
+    """Repli LEGACY discipliné : un `statut` 'ok' (inerte, ignoré par
+    calculer_forces) N'EST JAMAIS compté, même en l'absence de statut_juge."""
+    g = _setup(tmp_path, monkeypatch)
+    legacy_ok = {"type": "application", "capteur_force": True, "statut": "ok"}
+    r = g.garde_discrimination_force([legacy_ok])
+    assert r["total"] == 0 and r["succes"] == 0 and r["echec"] == 0
