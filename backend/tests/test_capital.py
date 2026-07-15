@@ -336,7 +336,14 @@ def test_successeur_a_forces_distinctes_discriminent_le_classement(cap):
     assert forces.get(boostee, 1.0) > forces.get(temoin, 1.0)   # forces DISTINCTES
 
     cands = cap.cap._candidats()
-    r = cap.nf.rank("partage", cands, forces=forces, embedder=_EmbedderConstant())
+    # PORTE À SEUIL au régime NOMINAL : la chaîne a produit 3 succès sur la boostée
+    # (≥ SEUIL_FORCE_SLUG) ; on atteste le signal GLOBAL suffisant (≥
+    # SEUIL_FORCE_GLOBAL) pour que la force ait le droit de départager. Les comptes
+    # par fiche viennent de la vraie chaîne (compter_events_force).
+    comptes = cap.nf.compter_events_force()
+    comptes["_total"] = max(comptes.get("_total", 0), cap.nf.SEUIL_FORCE_GLOBAL)
+    r = cap.nf.rank("partage", cands, forces=forces, embedder=_EmbedderConstant(),
+                    comptes_force=comptes)
     par = {it["file"][:-3]: it for it in r}
     assert par[boostee]["_rel_n"] == par[temoin]["_rel_n"]      # pertinence ÉGALE
     ordre = [it["file"][:-3] for it in r]
