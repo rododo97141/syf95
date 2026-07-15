@@ -48,6 +48,20 @@ BUDGET_COUPURES_VIGILANCE = 2   # PROVISOIRE : 1 coupure = ok-inerte (rien) ; �
 BUDGET_COUPURES_ALERTE = 6      # PROVISOIRE : coupures récurrentes = alerte.
 AVALIDER_TENDANCE_K = 3         # PROVISOIRE : croissance monotone sur k cycles = signal.
 
+# --------------------------------------------------------------------------- #
+# Seuils du GARDE ANTI-TAMPON (garde_discrimination_force) — PROVISOIRES. Le
+# garde regarde le JUGE (statut_juge des applications), pas la force elle-même :
+#   • FORCE_JUGE_SEUIL_MIN : en deçà, l'échantillon est trop maigre pour rien
+#     conclure (on ne crie pas « jury tamponneur » sur 2 succès).
+#   • FORCE_JUGE_CAP : au-delà, la file de consultations à juger déborde — le
+#     jugement humain prend du retard (signal de volume, PAS de discrimination).
+# Un juge qui, sur un échantillon SUFFISANT, ne dit JAMAIS « échec » (0 échec)
+# ne discrimine plus : il tamponne. C'est le miroir du garde force côté SORTIE
+# (nexus_capital verrouille l'ÉMISSION ; ici on ausculte la DISTRIBUTION jugée).
+# --------------------------------------------------------------------------- #
+FORCE_JUGE_SEUIL_MIN = 5   # PROVISOIRE : total jugé mini avant de conclure au tampon.
+FORCE_JUGE_CAP = 12        # PROVISOIRE : file à juger au-delà = retard de jugement.
+
 # Préfixes des capteurs budget — source unique nexus_budget, import DÉFENSIF
 # (98 doit rester debout même si le module budget est indisponible).
 try:
@@ -190,6 +204,78 @@ def signaux_jointure(cap, registre):
     except Exception:
         return alertes
     return alertes
+
+
+# --------------------------------------------------------------------------- #
+# GARDE ANTI-TAMPON (garde_discrimination_force) — signal ADDITIF, LECTURE SEULE.
+# La force est un CRÉDIT-VÉRITÉ : elle ne vaut que si le juge humain DISCRIMINE
+# (dit parfois « échec »). Un juge qui, sur un échantillon suffisant, ne rend
+# QUE des succès a cessé de juger — il tamponne, et la force perd son sens. Ce
+# garde N'ÉMET RIEN et ne pilote RIEN : il AUSCULTE la distribution des statuts
+# JUGÉS (statut_juge, avant retrogradation) portés par les applications de force.
+# --------------------------------------------------------------------------- #
+def garde_discrimination_force(events, file=None):
+    """Fonction PURE. Depuis les `events` de force (applications capteur_force=True
+    portant un statut_juge ∈ {succes, echec} — ou, pour les events LEGACY sans
+    statut_juge, un `statut` ∈ {succes, echec}), compte succès/échec + taux
+    d'échec, et rend un verdict de tampon :
+
+      • « jury tamponneur » si total ≥ FORCE_JUGE_SEUIL_MIN ET echec == 0 — sur un
+        échantillon suffisant, un juge sans un SEUL échec ne discrimine plus ;
+      • « file trop longue » si `file` est fourni et len(file) > FORCE_JUGE_CAP —
+        le jugement humain prend du retard (signal de VOLUME, pas de tampon) ;
+      • aucune alerte sinon (alerte = None).
+
+    Défensif : chaque event est lu sous try/except (une ligne corrompue ne fait
+    pas mentir le compte). Renvoie TOUJOURS un dict (jamais d'exception)."""
+    succes = echec = 0
+    for e in (events or []):
+        try:
+            if not e.get("capteur_force"):
+                continue
+            # statut_juge = le jugement humain (avant retrogradation). Repli sur
+            # `statut` pour les events LEGACY d'avant l'ajout de statut_juge. On ne
+            # compte QUE si la valeur retenue ∈ {succes, echec} : un 'ok'/'partiel'
+            # (inerte, ignoré par calculer_forces) n'entre JAMAIS dans le compte.
+            sj = e.get("statut_juge")
+            if sj is None:
+                sj = e.get("statut")
+            if sj == "succes":
+                succes += 1
+            elif sj == "echec":
+                echec += 1
+        except Exception:
+            continue
+    total = succes + echec
+    taux_echec = (echec / total) if total else 0.0
+
+    alerte = None
+    if total >= FORCE_JUGE_SEUIL_MIN and echec == 0:
+        alerte = ("jury tamponneur — %d jugement(s) de force, 0 échec : un juge "
+                  "sur un échantillon suffisant qui ne discrimine JAMAIS tamponne "
+                  "(la force perd son crédit-vérité)" % total)
+    elif file is not None and len(file) > FORCE_JUGE_CAP:
+        alerte = ("file de jugement trop longue — %d consultation(s) force-éligibles "
+                  "ouvertes (> %d) : le jugement humain prend du retard"
+                  % (len(file), FORCE_JUGE_CAP))
+
+    return {"total": total, "succes": succes, "echec": echec,
+            "taux_echec": taux_echec, "alerte": alerte}
+
+
+def garde_continuite():
+    """Lit DÉFENSIVEMENT les events de force capitalisés (nexus_capital) et la file
+    à juger (nexus_continuite), puis rend le verdict de garde_discrimination_force.
+    Module absent/cassé → None : 98 dégrade, ne tombe pas, et n'INVENTE aucune
+    alerte de dernier recours. LECTURE SEULE (aucune écriture)."""
+    try:
+        import nexus_capital
+        import nexus_continuite
+        events = [r for r in nexus_capital._lire_consultations() if r.get("capteur_force")]
+        file = nexus_continuite.file_a_juger()
+        return garde_discrimination_force(events, file=file)
+    except Exception:
+        return None
 
 
 # --------------------------------------------------------------------------- #
@@ -867,6 +953,15 @@ def main():
     if alertes_jointure:
         for a in alertes_jointure:
             signaux.append(a)
+
+    # --- GARDE ANTI-TAMPON (continuité de la force) — signal ADDITIF, LECTURE
+    # SEULE. On n'ausculte pas l'ÉMISSION (verrouillée par nexus_capital) mais la
+    # DISTRIBUTION des jugements : un juge qui ne dit jamais « échec » sur un
+    # échantillon suffisant tamponne. Défensif : garde_continuite() → None si les
+    # organes capital/continuité manquent (aucune alerte inventée). ---
+    garde_force = garde_continuite()
+    if garde_force and garde_force.get("alerte"):
+        signaux.append("🟠 " + garde_force["alerte"])
 
     print("🚨 Signaux de danger (Danger Theory — on réagit au dommage) :")
     if signaux:

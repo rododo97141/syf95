@@ -181,3 +181,86 @@ def test_98_lecture_liaisons_ne_cree_aucun_fichier(tmp_path, monkeypatch):
     liaisons = nexus_vie.lire_liaisons()
     g.plaies_vivantes([_plaie("t0", "x")], liaisons)
     assert not os.path.exists(tmp_path / "lec" / "lecons" / "brouillons_promus.jsonl")
+
+
+# ---------------- GARDE ANTI-TAMPON (garde_discrimination_force) ----------------
+def _juge(statut_juge):
+    """Un event de force capitalisé (application) portant un jugement humain."""
+    return {"type": "application", "capteur_force": True, "statut_juge": statut_juge}
+
+
+def test_garde_jury_tamponneur_sur_echantillon_suffisant_zero_echec(tmp_path, monkeypatch):
+    """5 succès / 0 échec (total ≥ SEUIL_MIN) → alerte « jury tamponneur ». Un juge
+    qui ne discrimine JAMAIS sur un échantillon suffisant tamponne."""
+    g = _setup(tmp_path, monkeypatch)
+    events = [_juge("succes")] * 5
+    r = g.garde_discrimination_force(events)
+    assert r["total"] == 5 and r["succes"] == 5 and r["echec"] == 0
+    assert r["taux_echec"] == 0.0
+    # MUTATION (ii) : un garde qui n'alerte pas sur 0 échec passerait ici → ROUGE.
+    assert r["alerte"] is not None
+    assert "tamponneur" in r["alerte"]
+
+
+def test_garde_un_seul_echec_ne_tamponne_pas(tmp_path, monkeypatch):
+    """4 succès / 1 échec (total = SEUIL_MIN, mais echec > 0) → AUCUNE alerte : le
+    juge discrimine, même faiblement. C'est le garde-fou contre le faux positif."""
+    g = _setup(tmp_path, monkeypatch)
+    events = [_juge("succes")] * 4 + [_juge("echec")]
+    r = g.garde_discrimination_force(events)
+    assert r["total"] == 5 and r["echec"] == 1
+    assert r["alerte"] is None
+
+
+def test_garde_file_trop_longue_est_un_signal_de_volume(tmp_path, monkeypatch):
+    """File de 13 consultations ouvertes (> CAP=12) → alerte de VOLUME (retard de
+    jugement), indépendante de la discrimination. Sur peu d'events jugés, aucune
+    alerte de tampon ne masque le signal de volume."""
+    g = _setup(tmp_path, monkeypatch)
+    file = [{"id": "cons-%04d" % i} for i in range(13)]
+    r = g.garde_discrimination_force([_juge("succes")], file=file)
+    assert r["alerte"] is not None
+    assert "trop longue" in r["alerte"]
+
+
+def test_garde_sous_le_seuil_aucune_alerte(tmp_path, monkeypatch):
+    """Total < SEUIL_MIN : échantillon trop maigre pour conclure → alerte None,
+    même à 0 échec (2 succès ne prouvent pas un tampon). File courte : rien non plus."""
+    g = _setup(tmp_path, monkeypatch)
+    r = g.garde_discrimination_force([_juge("succes")] * 2, file=[{"id": "cons-0001"}])
+    assert r["total"] == 2 and r["alerte"] is None
+
+
+def test_garde_ne_compte_que_les_events_de_force_juges(tmp_path, monkeypatch):
+    """Défensif : sans capteur_force, ou sans statut_juge ∈ {succes, echec}, un
+    enregistrement N'ENTRE PAS dans le compte (une ligne parasite ne fait pas
+    mentir le garde)."""
+    g = _setup(tmp_path, monkeypatch)
+    events = [
+        _juge("succes"), _juge("succes"), _juge("succes"),
+        _juge("succes"), _juge("succes"),
+        {"type": "application", "capteur_force": False, "statut_juge": "echec"},  # pas force
+        {"type": "consultation", "statut_juge": "echec"},                          # pas force
+        {"capteur_force": True, "statut_juge": "ok"},                              # ni succes ni echec
+    ]
+    r = g.garde_discrimination_force(events)
+    assert r["total"] == 5 and r["echec"] == 0     # les 3 parasites ignorés
+    assert "tamponneur" in r["alerte"]
+
+
+def test_garde_event_legacy_sans_statut_juge_se_rabat_sur_statut(tmp_path, monkeypatch):
+    """Event LEGACY (d'avant l'ajout de statut_juge) : capteur_force=True SANS
+    statut_juge → on se rabat sur `statut`. Un statut 'succes' compte pour 1 succès."""
+    g = _setup(tmp_path, monkeypatch)
+    legacy = {"type": "application", "capteur_force": True, "statut": "succes"}
+    r = g.garde_discrimination_force([legacy])
+    assert r["total"] == 1 and r["succes"] == 1 and r["echec"] == 0
+
+
+def test_garde_event_legacy_statut_ok_inerte_non_compte(tmp_path, monkeypatch):
+    """Repli LEGACY discipliné : un `statut` 'ok' (inerte, ignoré par
+    calculer_forces) N'EST JAMAIS compté, même en l'absence de statut_juge."""
+    g = _setup(tmp_path, monkeypatch)
+    legacy_ok = {"type": "application", "capteur_force": True, "statut": "ok"}
+    r = g.garde_discrimination_force([legacy_ok])
+    assert r["total"] == 0 and r["succes"] == 0 and r["echec"] == 0
