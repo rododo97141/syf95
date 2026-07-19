@@ -125,8 +125,12 @@ def test_retrocompat_exacte_sans_embedder(nf, mem):
     query = "zorglubide budget"
     cands = _cands(mem, query)
 
+    # Régime NOMINAL de la PORTE À SEUIL : signal jugé suffisant (global ET par
+    # fiche) → la force s'applique et la sortie est BYTE-IDENTIQUE à l'historique.
+    comptes = {"boostee": nf.SEUIL_FORCE_SLUG, "rare": nf.SEUIL_FORCE_SLUG,
+               "_total": nf.SEUIL_FORCE_GLOBAL}
     attendu = mem.rank_candidates(query, cands, forces=forces)
-    obtenu = nf.rank(query, cands, forces=forces)                 # embedder=None
+    obtenu = nf.rank(query, cands, forces=forces, comptes_force=comptes)  # embedder=None
 
     # ordre STRICTEMENT identique
     assert [r["file"] for r in obtenu] == [r["file"] for r in attendu]
@@ -201,7 +205,12 @@ def test_force_departage_a_pertinence_egale(nf, mem):
     forces = {"forte": 5.0, "faible": 0.2}
     cands = _cands(mem, "distinctifxyz")
 
-    r = nf.rank("distinctifxyz", cands, forces=forces, embedder=_EmbedderConstant())
+    # Régime NOMINAL : la porte à seuil est ouverte pour les deux fiches, sinon la
+    # force serait neutre et ne pourrait pas départager.
+    comptes = {"forte": nf.SEUIL_FORCE_SLUG, "faible": nf.SEUIL_FORCE_SLUG,
+               "_total": nf.SEUIL_FORCE_GLOBAL}
+    r = nf.rank("distinctifxyz", cands, forces=forces, embedder=_EmbedderConstant(),
+                comptes_force=comptes)
     # à pertinence égale, la force plus haute remonte : la force est INFLUENTE.
     assert r[0]["file"] == "forte.md"
     assert r[0]["_rel_n"] == r[1]["_rel_n"]    # bien la même pertinence

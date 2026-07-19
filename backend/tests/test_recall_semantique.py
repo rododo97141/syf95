@@ -357,6 +357,17 @@ def test_B7_forces_lues_departagent_sans_dominer(mem, nf):
     with open(os.path.join(mem.ROOT, "forces.json"), "w", encoding="utf-8") as f:
         json.dump({"forte": 5.0, "faible": 0.2}, f)
 
+    # Régime NOMINAL de la PORTE À SEUIL : la force LUE ne départage QUE si le
+    # signal jugé est suffisant. On sème des capteurs jugés (isolés par conftest
+    # dans CAPTEURS_ROOT) pour ouvrir la porte — global ET par fiche. compter ne
+    # compte que le SIGNAL ; les valeurs de force restent celles de forces.json.
+    cj = os.path.join(os.environ["CAPTEURS_ROOT"], "capteurs", "journal.jsonl")
+    os.makedirs(os.path.dirname(cj), exist_ok=True)
+    with open(cj, "w", encoding="utf-8") as f:
+        for fiche in ("forte", "faible"):
+            for _ in range(nf.SEUIL_FORCE_GLOBAL):     # ≥ seuil global ET par fiche
+                f.write(json.dumps({"fiche": fiche, "statut": "succes"}) + "\n")
+
     res = mem.recall({"query": ["distinctifxyz"], "scope": ["structure"],
                       "semantique": ["1"]}, embedder=nf.EmbedderFake())
     ordre = [r["file"] for r in res["results"]]

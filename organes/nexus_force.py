@@ -43,6 +43,23 @@ FORCE_DEFAUT = 1.0
 FORCE_MIN = 0.2
 FORCE_MAX = 5.0
 
+# --------------------------------------------------------------------------- #
+# PORTE À SEUIL doctrinale de la force (auto-levante : ni flag, ni état, ni
+# migration — la porte s'ouvre d'elle-même quand le signal réel devient assez
+# fort). La force d'une fiche n'influence rank() QUE si son signal jugé est
+# suffisant ; sinon elle reste NEUTRE — aucun bonus, aucune pénalité.
+#   • SEUIL_FORCE_GLOBAL : nombre TOTAL d'événements de force jugés (toutes
+#     fiches confondues) en deçà duquel AUCUNE force ne s'applique — le corpus
+#     n'a pas encore assez vécu pour que la force veuille dire quoi que ce soit.
+#   • SEUIL_FORCE_SLUG : nombre d'événements jugés POUR CETTE fiche en deçà
+#     duquel SA force reste neutre — une fiche à peine éprouvée ne pèse pas.
+# Au régime NOMINAL (les deux seuils atteints), la sortie de rank() est
+# BYTE-IDENTIQUE à l'historique. Sous seuil, la force ne peut NI monter NI
+# descendre une fiche. PROVISOIRES (doctrine, non mesurés).
+# --------------------------------------------------------------------------- #
+SEUIL_FORCE_GLOBAL = 15
+SEUIL_FORCE_SLUG = 3
+
 
 def _racine_memoire():
     """Racine des données mémoire-beta = ROOT de memory_api.py.
@@ -119,6 +136,42 @@ def appliquer():
         return {}
 
 
+def compter_events_force(evenements=None):
+    """Compte, PAR FICHE, les événements de force JUGÉS — la MATIÈRE de la porte
+    à seuil. Miroir EXACT du filtre de calculer_forces (fiche non vide ET statut
+    ∈ {succes, echec}), avec le MÊME repli LEGACY que le garde 98
+    (statut_juge → statut) : un event d'avant l'ajout de statut_juge se rabat sur
+    `statut`. Un 'ok'/'partiel' (inerte, ignoré par calculer_forces) n'est JAMAIS
+    compté.
+
+    Renvoie {fiche: n_par_fiche, "_total": n_total} où n_total est la somme des
+    comptes de toutes les fiches. LECTURE SEULE : lit les capteurs via
+    nexus_sense (comme calculer_forces), n'écrit rien, ne modifie rien.
+
+    Fonction PURE et injectable (evenements fournis en test) : elle décide, pour
+    chaque fiche, si son signal est assez fort pour que sa force pèse dans
+    rank() (cf. SEUIL_FORCE_GLOBAL / SEUIL_FORCE_SLUG)."""
+    if evenements is None:
+        evenements = nexus_sense.lire()
+
+    comptes = {}
+    total = 0
+    for ev in evenements:
+        fiche = ev.get("fiche")
+        if not fiche:
+            continue
+        # statut_juge = jugement humain (avant retrogradation) ; repli sur
+        # `statut` pour les events LEGACY — exactement comme le garde 98.
+        statut = ev.get("statut_juge")
+        if statut is None:
+            statut = ev.get("statut")
+        if statut in ("succes", "echec"):
+            comptes[fiche] = comptes.get(fiche, 0) + 1
+            total += 1
+    comptes["_total"] = total
+    return comptes
+
+
 # =========================================================================== #
 # RECALL MULTI-SIGNAUX (lexical + sémantique + force vivante)
 # ---------------------------------------------------------------------------
@@ -190,12 +243,42 @@ def _force_for(forces, fl, rel):
     return 1.0
 
 
-def _rank_lexical(query, cands, forces=None):
-    """Classement pertinence(IDF) × force — MIROIR STRICT de
-    memory_api.rank_candidates. C'est le chemin de RÉTROCOMPAT : rank() sans
-    embedder délègue ici et renvoie exactement la forme/le score historiques."""
+def _count_for(comptes, fl, rel):
+    """Nombre d'événements de force jugés POUR une fiche — résolu par la MÊME clé
+    que _force_for (nom complet, radical sans .md, ou chemin relatif), pour que le
+    compte et la force d'une fiche se retrouvent TOUJOURS sous la même clé. 0 si
+    aucune correspondance. Miroir EXACT de _force_for, côté comptes."""
+    stem = fl[:-3] if fl.endswith(".md") else fl
+    for key in (fl, stem, rel):
+        if key in comptes:
+            return comptes[key]
+    return 0
+
+
+def _porte_force_ouverte(comptes, total, fl, rel):
+    """PORTE À SEUIL : la force de cette fiche a-t-elle le droit de peser ?
+    Ouverte SEULEMENT si le signal global ET le signal propre à la fiche sont
+    tous deux suffisants (total ≥ SEUIL_FORCE_GLOBAL ET n_fiche ≥
+    SEUIL_FORCE_SLUG). Sinon fermée → force NEUTRE en aval."""
+    return total >= SEUIL_FORCE_GLOBAL and _count_for(comptes, fl, rel) >= SEUIL_FORCE_SLUG
+
+
+def _rank_lexical(query, cands, forces=None, comptes=None):
+    """Classement pertinence(IDF) × force EFFECTIVE — MIROIR STRICT de
+    memory_api.rank_candidates quand la porte est ouverte. C'est le chemin de
+    RÉTROCOMPAT : rank() sans embedder délègue ici.
+
+    Force EFFECTIVE : la force réelle de la fiche SI sa porte à seuil est ouverte,
+    SINON FORCE_DEFAUT (1.0, multiplicateur neutre) — la force ne peut alors ni
+    monter ni descendre la fiche. Au régime nominal (portes ouvertes) la sortie
+    est BYTE-IDENTIQUE à l'historique (force_eff == force, _score == rel × force).
+    Les comptes viennent de compter_events_force (calculés une fois par appel,
+    injectables ; lus ici seulement s'ils ne sont pas fournis)."""
     if forces is None:
         forces = _lire_forces_existantes()
+    if comptes is None:
+        comptes = compter_events_force()
+    total = comptes.get("_total", 0)
     qtokens = list(dict.fromkeys(_tokens(query)))          # dédup, ordre stable
     n = len(cands) or 1
     cand_tokens = [set(_tokens(c.get("_search", ""))) for c in cands]
@@ -209,10 +292,15 @@ def _rank_lexical(query, cands, forces=None):
     for c, toks in zip(cands, cand_tokens):
         rel = sum(idf[t] for t in qtokens if t in toks)
         force = _force_for(forces, c.get("file", ""), c.get("path", ""))
+        # PORTE À SEUIL : force réelle seulement si le signal suffit, sinon neutre.
+        if _porte_force_ouverte(comptes, total, c.get("file", ""), c.get("path", "")):
+            force_eff = force
+        else:
+            force_eff = FORCE_DEFAUT
         item = dict(c)
         item["_relevance"] = rel
-        item["_force"] = force
-        item["_score"] = rel * force
+        item["_force"] = force_eff
+        item["_score"] = rel * force_eff
         ranked.append(item)
     ranked.sort(key=lambda x: (-x["_score"], x.get("path", ""), x.get("file", "")))
     return ranked
@@ -351,11 +439,12 @@ def rank(query, candidates, forces=None, embedder=None,
          poids_force=POIDS_FORCE_DEFAUT,
          semantique_ouvre_candidats=False,
          seuil_semantique_elargissement=SEUIL_ELARGISSEMENT_DEFAUT,
-         corpus=None):
+         corpus=None, comptes_force=None):
     """Classe des candidats (chacun portant « _search », « file », « path »).
 
     RÉTROCOMPAT : `embedder=None` → comportement HISTORIQUE strictement
-    identique (score = pertinence(IDF) × force), forme de retour inchangée.
+    identique (score = pertinence(IDF) × force) au régime NOMINAL, forme de
+    retour inchangée.
 
     Avec un embedder injecté, fusion multi-signaux ADDITIVE :
         rel_n = pertinence(IDF) normalisée par le max des candidats  ∈ [0,1]
@@ -363,16 +452,29 @@ def rank(query, candidates, forces=None, embedder=None,
         pert  = (1 - alpha) * rel_n + alpha * sem                    ∈ [0,1]
         score = pert + beta * f(force)      (JAMAIS pert * force)
 
+    PORTE À SEUIL de la force (les DEUX chemins) : la force d'une fiche n'influence
+    le classement QUE si son signal jugé est suffisant (cf. compter_events_force /
+    SEUIL_FORCE_GLOBAL / SEUIL_FORCE_SLUG). Sous seuil elle est NEUTRE — additif :
+    f(force) forcé à 0 (beta·f = 0, ni bonus ni pénalité) ; légataire : force_eff
+    = FORCE_DEFAUT (multiplicateur 1.0). Les comptes viennent de
+    compter_events_force(), calculés UNE FOIS par appel (injectables via
+    `comptes_force` pour les tests).
+
     `semantique_ouvre_candidats=True` (+ embedder + `corpus`) : le sémantique
     ÉLARGIT le jeu candidat — des fiches à fort sem mais SANS recouvrement
     lexical (seuil `seuil_semantique_elargissement`) sont ajoutées, pas
     seulement reclassées. Sans `corpus`, aucun élargissement possible.
 
-    Fonction PURE : ne lit/écrit aucun fichier hors chargement optionnel de
-    forces.json (lecture seule), ne modifie pas `candidates` en place."""
+    Fonction PURE : lecture seule (chargement optionnel de forces.json et des
+    capteurs pour les comptes, sauf `comptes_force` injecté), ne modifie pas
+    `candidates` en place."""
+    # Comptes de force calculés UNE SEULE FOIS par appel (injectables en test).
+    comptes = comptes_force if comptes_force is not None else compter_events_force()
+    total = comptes.get("_total", 0)
+
     # --- Chemin de RÉTROCOMPAT : aucun embedder → aucun signal sémantique. --- #
     if embedder is None:
-        return _rank_lexical(query, candidates, forces)
+        return _rank_lexical(query, candidates, forces, comptes)
 
     if forces is None:
         forces = _lire_forces_existantes()
@@ -383,7 +485,7 @@ def rank(query, candidates, forces=None, embedder=None,
     qvec = _embed_robuste(embedder, query)
 
     # 1) Base lexicale : pertinence(IDF) via le MÊME calcul (rel, force).
-    pool = _rank_lexical(query, candidates, forces)
+    pool = _rank_lexical(query, candidates, forces, comptes)
     for it in pool:
         it["_sem"] = _sem(embedder, qvec, _texte_fiche(it))
 
@@ -413,8 +515,16 @@ def rank(query, candidates, forces=None, embedder=None,
         rel_n = (rel / max_rel) if max_rel > 0 else 0.0
         sem = it.get("_sem", 0.0)
         pert = (1.0 - alpha) * rel_n + alpha * sem
-        force = it.get("_force", 1.0)
-        ff = f_force(force)
+        # Force RÉELLE de la fiche (indépendante du _force éventuellement
+        # neutralisé par _rank_lexical), et PORTE À SEUIL : sous seuil, f(force)
+        # est forcé à 0 → beta·f = 0, la force ne peut NI monter NI descendre la
+        # fiche. Au régime nominal (porte ouverte), f(force) == f_force(réelle),
+        # score BYTE-IDENTIQUE à l'historique.
+        force = _force_for(forces, it.get("file", ""), it.get("path", ""))
+        if _porte_force_ouverte(comptes, total, it.get("file", ""), it.get("path", "")):
+            ff = f_force(force)
+        else:
+            ff = 0.0
         item = dict(it)
         item["_relevance"] = rel
         item["_rel_n"] = rel_n
