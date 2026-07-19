@@ -43,6 +43,12 @@ FORCE_DEFAUT = 1.0
 FORCE_MIN = 0.2
 FORCE_MAX = 5.0
 
+# Apport MAXIMAL de la vitalité (réutilisation observée, cf. nexus_vitalite)
+# SEULE, sans aucun succès/échec — PROVISOIRE, plafonné loin de FORCE_MAX pour
+# qu'un indice de vitalité plein (1.0) ne puisse jamais, à lui seul, faire
+# gagner une fiche jamais éprouvée par succes/echec réels.
+DELTA_VITALITE_MAX = 0.3
+
 
 def _racine_memoire():
     """Racine des données mémoire-beta = ROOT de memory_api.py.
@@ -71,13 +77,23 @@ def _lire_forces_existantes():
         return {}
 
 
-def calculer_forces(evenements=None):
+def calculer_forces(evenements=None, vitalite=None):
     """Calcule le multiplicateur de force par fiche à partir des capteurs
     porteurs d'un champ `fiche` non vide. Score net = (succès - échecs) pour
     cette fiche, sur TOUT l'historique ; multiplicateur = 1.0 ± pas fixe par
     unité de score net, borné à [FORCE_MIN, FORCE_MAX]. Fusionne avec les
     forces déjà présentes dans forces.json (préserve les réglages manuels des
-    fiches sans capteur)."""
+    fiches sans capteur).
+
+    `vitalite` (AJOUT PUR, opt-in) : dict optionnel {fiche: indice 0..1}
+    (typiquement nexus_vitalite.indice_vitalite()). Défaut None = AUCUN
+    changement de comportement historique — invariant préservé :
+    calculer_forces() sans activité succes/echec reste {} (cf.
+    test_orchestrateur_routage.test_observer_ok_laisse_calculer_forces_inerte).
+    Quand `vitalite` est fourni, chaque fiche avec un score succes/echec OU un
+    indice de vitalité non nul reçoit en plus DELTA_VITALITE_MAX * son indice,
+    ADDITIVEMENT au score succes/echec, bornée comme avant à
+    [FORCE_MIN, FORCE_MAX]."""
     if evenements is None:
         evenements = nexus_sense.lire()
 
@@ -93,8 +109,19 @@ def calculer_forces(evenements=None):
             score[fiche] = score.get(fiche, 0) - 1
 
     forces = _lire_forces_existantes()
-    for fiche, s in score.items():
-        valeur = FORCE_DEFAUT + DELTA_SUCCES * max(s, 0) + DELTA_ECHEC * max(-s, 0)
+
+    if vitalite is None:
+        for fiche, s in score.items():
+            valeur = FORCE_DEFAUT + DELTA_SUCCES * max(s, 0) + DELTA_ECHEC * max(-s, 0)
+            forces[fiche] = round(min(FORCE_MAX, max(FORCE_MIN, valeur)), 4)
+        return forces
+
+    fiches = set(score) | {fiche for fiche, idx in vitalite.items() if idx}
+    for fiche in fiches:
+        s = score.get(fiche, 0)
+        idx = vitalite.get(fiche) or 0.0
+        valeur = (FORCE_DEFAUT + DELTA_SUCCES * max(s, 0) + DELTA_ECHEC * max(-s, 0)
+                  + DELTA_VITALITE_MAX * idx)
         forces[fiche] = round(min(FORCE_MAX, max(FORCE_MIN, valeur)), 4)
     return forces
 
