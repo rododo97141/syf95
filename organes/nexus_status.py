@@ -44,7 +44,7 @@ def main():
         print("  " + l.strip())
 
     print("\n🔎 ANALYSER — 96 (KPIs + gardien de la réalité)")
-    for l in run("nexus_96.py", grep_from="📡 KPIs"):
+    for l in run("nexus_96.py", grep_from="🔎 NEXUS-96"):
         if "🎯 Recommand" in l: break
         print("  " + l.strip())
 

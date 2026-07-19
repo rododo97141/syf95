@@ -180,8 +180,11 @@ def test_golden_defaut_sans_embedder_byte_identique(nf, mem):
     cands = mem._scan(mem.STRUCT, query.lower(), "structure")
     forces = {"a": 3.0, "b": 0.5}
 
+    # Régime NOMINAL de la porte à seuil : la force pèse, sortie byte-identique.
+    comptes = {"a": nf.SEUIL_FORCE_SLUG, "b": nf.SEUIL_FORCE_SLUG,
+               "_total": nf.SEUIL_FORCE_GLOBAL}
     attendu = mem.rank_candidates(query, cands, forces=forces)
-    obtenu = nf.rank(query, cands, forces=forces)        # embedder=None
+    obtenu = nf.rank(query, cands, forces=forces, comptes_force=comptes)  # embedder=None
 
     assert [r["file"] for r in obtenu] == [r["file"] for r in attendu]  # ordre
     for a, b in zip(attendu, obtenu):
