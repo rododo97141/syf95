@@ -62,6 +62,27 @@ AVALIDER_TENDANCE_K = 3         # PROVISOIRE : croissance monotone sur k cycles 
 FORCE_JUGE_SEUIL_MIN = 5   # PROVISOIRE : total jugé mini avant de conclure au tampon.
 FORCE_JUGE_CAP = 12        # PROVISOIRE : file à juger au-delà = retard de jugement.
 
+# --------------------------------------------------------------------------- #
+# Seuil de REDONDANCE — TAUX invariant d'échelle (paires redondantes / paires
+# intra-catégorie POSSIBLES), PAS un compte brut. Mesuré le 19/07 sur la base
+# réelle : 6 paires redondantes / 288 paires intra-cat possibles = 2,08 % → base
+# saine, aucun signal attendu. L'ancien critère (redondances >= 3, un COMPTE)
+# montait sur cette même base saine dès que le nombre de fiches croissait —
+# plus de fiches ⇒ mécaniquement plus de paires, alarme non fiable, indépendante
+# de la santé réelle. Le TAUX corrige ça : sain à petite ET grande échelle.
+# --------------------------------------------------------------------------- #
+SEUIL_TAUX_REDONDANCE = 0.03   # PROVISOIRE : ≥3,0 % des paires possibles = signal.
+
+# --------------------------------------------------------------------------- #
+# Seuil de SATURATION mémoire — Danger Theory : un niveau NOMINAL n'est pas un
+# dommage. `cap`=200 est un plafond ARBITRAIRE (pas une limite dure mesurée) ;
+# la base réelle tournait à 78,5 % de remplissage sans aucun signe de dommage.
+# L'ancien seuil (≥50 %) allumait une VIGILANCE permanente sur une base saine —
+# alarme muette par sur-sensibilité. Relevé à 90 % : proche du plafond, là où le
+# risque de dégradation (refus d'écriture, tri d'urgence) devient concret.
+# --------------------------------------------------------------------------- #
+SEUIL_SATURATION = 0.90        # PROVISOIRE : ≥90 % de remplissage = signal.
+
 # Préfixes des capteurs budget — source unique nexus_budget, import DÉFENSIF
 # (98 doit rester debout même si le module budget est indisponible).
 try:
@@ -800,6 +821,35 @@ def compter_redondances(groupes, embedder=None, seuil_lex=0.50, seuil_sem=0.80):
     return {"total": total, "lexical": lexical, "semantique": semantique}
 
 
+def paires_intra_cat_possibles(groupes):
+    """Nombre de paires INTRA-catégorie POSSIBLES : C(n,2) par catégorie, sommé
+    sur toutes les catégories. Dénominateur du TAUX de redondance (invariant
+    d'échelle) — le nombre de fiches/catégories ne doit pas, à lui seul, faire
+    monter le signal. PURE, LECTURE SEULE, défensive : entrée mauvaise → 0,
+    jamais d'exception."""
+    total = 0
+    try:
+        items = list((groupes or {}).items())
+    except Exception:
+        return 0
+    for _cle, fiches in items:
+        n = len(fiches) if isinstance(fiches, (list, tuple)) else 0
+        total += n * (n - 1) // 2
+    return total
+
+
+def taux_redondance(redondances, possibles):
+    """TAUX de redondance = paires redondantes / paires intra-cat possibles.
+    Invariant d'échelle (contrairement au COMPTE brut `redondances`) : une base
+    à 300 fiches n'est pas plus « redondante » qu'une base à 30 fiches si le
+    taux est identique. PURE, défensive : `possibles` <= 0 → 0.0, jamais de
+    ZeroDivisionError."""
+    try:
+        return (redondances / possibles) if possibles > 0 else 0.0
+    except Exception:
+        return 0.0
+
+
 def main():
     try:
         stats = get("/stats")
@@ -812,8 +862,9 @@ def main():
     remplissage = stats.get("remplissage", 0) * 100
     en_attente = vrais_en_attente()  # compte honnête : vrais candidats, pas les tombes
 
-    # Signal 1 — saturation mémoire
-    sat_danger = remplissage >= 50
+    # Signal 1 — saturation mémoire (Danger Theory : un niveau nominal n'est pas
+    # un dommage — cf. SEUIL_SATURATION)
+    sat_danger = remplissage >= SEUIL_SATURATION * 100
 
     # Signal 2 — redondance (gonflement = douleur). COUVERTURE COMPLÈTE (TOUTES
     # les catégories, plus de `break` qui n'en mesurait qu'UNE par domaine) +
@@ -853,7 +904,9 @@ def main():
     red = compter_redondances(groupes, embedder=embedder)
     redondances = red["total"]
     mode_red = "lexical seul" if embedder is None else "lexical + sémantique"
-    red_danger = redondances >= 3
+    possibles_red = paires_intra_cat_possibles(groupes)
+    taux_red = taux_redondance(redondances, possibles_red)
+    red_danger = taux_red >= SEUIL_TAUX_REDONDANCE
 
     # Signal 3 — limites non résolues (les « douleurs » du système)
     nb_limites = sum(len(c) for d, cats in domains.items() for cn, c in cats.items() if cn == "limites")
@@ -866,13 +919,14 @@ def main():
     print("   (hors boucle — observe l'organisme lui-même)\n")
     print(f"   Mémoire : {fiches}/{cap} ({remplissage:.0f}% rempli)")
     print(f"   Redondance : {redondances} paire(s) — {red['lexical']} par les mots, "
-          f"{red['semantique']} par le sens (mode : {mode_red})")
+          f"{red['semantique']} par le sens (mode : {mode_red}) · "
+          f"taux {taux_red * 100:.2f}% des {possibles_red} paire(s) intra-cat possible(s)")
     print(f"   Limites enregistrées (douleurs) : {nb_limites}")
     print(f"   File en_attente : {en_attente}\n")
 
     signaux = []
-    if sat_danger:     signaux.append("🟠 saturation mémoire (≥50 %) — lancer une passe de tri")
-    if red_danger:     signaux.append("🟠 redondance élevée — lancer nexus_consolidate/reconcile")
+    if sat_danger:     signaux.append(f"🟠 saturation mémoire (≥{SEUIL_SATURATION * 100:.0f} %) — lancer une passe de tri")
+    if red_danger:     signaux.append(f"🟠 redondance élevée ({taux_red * 100:.1f} % ≥ {SEUIL_TAUX_REDONDANCE * 100:.0f} %) — lancer nexus_consolidate/reconcile")
     if lim_danger:     signaux.append("🟠 limites non résolues qui s'accumulent — en traiter")
     if backlog_danger: signaux.append("🟠 backlog en_attente — réconcilier (nexus_reconcile)")
 
