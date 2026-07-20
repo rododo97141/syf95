@@ -1,3 +1,4 @@
 # Dépendances de développement uniquement (les modules n'utilisent que la
 # bibliothèque standard). Installation :  pip install -r backend/requirements-dev.txt
 pytest>=7
+hypothesis>=6
