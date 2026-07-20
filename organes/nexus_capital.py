@@ -40,7 +40,9 @@ Les gestes :
   1) capitaliser(question, reponse, contexte, domaine)  -> écrit la fiche + pointeur leçon
   2) consulter(query, tache, memoire=None)              -> délègue à rank() ; avec `memoire`,
                                                            délègue le rappel à recall (chemin boucle)
-  3) generer_jeton_confirmation(consultation_id)        -> LE geste humain : émet un jeton usage-unique
+  3) generer_jeton_confirmation(consultation_id, secret=None) -> LE geste humain : émet un jeton
+                                                           usage-unique (barrière secret optionnelle,
+                                                           cf. capital/jeton_secret.json)
   4) appliquer(consultation_id, fiche_retenue, resultat, tache, jeton) -> clôture + capteur de force
                                                            (EXIGE un jeton valide non consommé, l'inscrit)
   5) clore_sans_dette(consultation_id, raison)          -> clôture SANS capteur de force (rien exigé)
@@ -52,6 +54,7 @@ import os
 import re
 import sys
 import json
+import hashlib
 import datetime
 import unicodedata
 
@@ -143,6 +146,33 @@ def _chemin_consultations():
 
 def _chemin_jetons():
     return os.path.join(_racine(), "capital", "jetons.jsonl")
+
+
+# --------------------------------------------------------------------------- #
+# Secret de confirmation (OPTIONNEL) — capital/jeton_secret.json ne contient
+# JAMAIS le secret en clair, seulement son hash SHA-256. Absent : comportement
+# historique INCHANGÉ (rétrocompat totale, cf. generer_jeton_confirmation).
+# --------------------------------------------------------------------------- #
+def _chemin_secret_jeton():
+    return os.path.join(_racine(), "capital", "jeton_secret.json")
+
+
+def _hash_secret(secret):
+    return hashlib.sha256((secret or "").encode("utf-8")).hexdigest()
+
+
+def _secret_configure():
+    """Renvoie le hash configuré (str) ou None si jeton_secret.json est absent
+    ou invalide. LECTURE SEULE : cet organe n'écrit jamais ce fichier (geste de
+    Kily, hors session agent)."""
+    chemin = _chemin_secret_jeton()
+    try:
+        with open(chemin, encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return None
+    h = (data.get("hash") or "").strip()
+    return h or None
 
 
 # =========================================================================== #
@@ -462,19 +492,32 @@ def appliquer(consultation_id, fiche_retenue, resultat, tache, jeton=None):
 #    jetons.jsonl. Un jeton = une confirmation humaine, à usage UNIQUE, adossée à
 #    une consultation existante. Aucun chemin mécanique ne l'appelle (ni appliquer).
 # =========================================================================== #
-def generer_jeton_confirmation(consultation_id):
+def generer_jeton_confirmation(consultation_id, secret=None):
     """Émet un jeton de confirmation à USAGE UNIQUE pour `consultation_id` et
     renvoie son id. SEULE écrivaine du registre jetons.jsonl.
 
     C'est LE geste humain : sa seule invocation matérialise un jugement humain
     externe. La consultation doit exister (on ne confirme pas dans le vide). Le
     jeton reste « non consommé » tant qu'aucun event de force ne le référence
-    (cf. appliquer / _jeton_deja_reference)."""
+    (cf. appliquer / _jeton_deja_reference).
+
+    BARRIÈRE TECHNIQUE (optionnelle, activée par capital/jeton_secret.json) :
+    sans ce fichier, RIEN ne change (rétrocompat totale — le geste reste
+    accessible à quiconque appelle la fonction, comme avant). Une fois le
+    fichier posé par Kily (hors session agent — jamais le secret en clair dans
+    ce dépôt), `secret` doit correspondre au hash configuré, sinon REFUS : plus
+    aucun chemin mécanique ne peut alors forger la confirmation."""
     cons = _consultation(consultation_id)
     if cons is None:
         raise ValueError(
             "generer_jeton_confirmation: consultation inconnue: %r"
             % (consultation_id,))
+    hash_configure = _secret_configure()
+    if hash_configure is not None and (secret is None or _hash_secret(secret) != hash_configure):
+        raise ValueError(
+            "generer_jeton_confirmation: REFUS - secret de confirmation absent ou "
+            "incorrect (capital/jeton_secret.json configuré : seul le geste humain "
+            "qui connaît le secret peut émettre un jeton).")
     jid = _prochain_jeton_id()
     rec = {
         "type": "jeton",

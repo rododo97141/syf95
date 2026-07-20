@@ -25,6 +25,11 @@ touche JAMAIS le vrai memoire_data/ ni le vrai journal des leçons) :
       propres de nexus_capital (les organes gelés + une fiche corpus étrangère).
   T8  = la suite complète verte (zéro régression) — vérifiée par l'exécution
       pytest, cf. corps de PR.
+  T9  secret de confirmation optionnel (capital/jeton_secret.json, hash SHA-256
+      SEUL — jamais le secret en clair) : sans configuration, comportement
+      HISTORIQUE inchangé ; configuré, REFUS sans secret ET avec un mauvais
+      secret, ACCEPTE avec le bon secret et le jeton fonctionne normalement
+      avec appliquer().
 """
 import os
 import sys
@@ -509,3 +514,51 @@ def test_t8_smoke_imports_brique(cap):
     import nexus_98
     assert callable(nexus_98.backlog_capital)
     assert callable(nexus_98.calc_verdict)
+
+
+# =========================================================================== #
+# T9 — secret de confirmation optionnel (barrière technique, capital/jeton_secret.json)
+#   Sans configuration : rétrocompat TOTALE (regression). Configuré : REFUS sans
+#   secret ET avec un mauvais secret, ACCEPTE avec le bon secret (fonctionne
+#   ensuite normalement avec appliquer()).
+# =========================================================================== #
+def test_t9_sans_configuration_generer_jeton_confirmation_inchange(cap):
+    slug = cap.cap.capitaliser("Critères secretalpha sans configuration", "r", "ctx", "nexus")
+    rec = cap.cap.consulter("secretalpha", "tâche T9a")
+    assert rec["slugs_retournes"] == [slug]
+
+    # capital/jeton_secret.json ABSENT : secret ignoré, comportement HISTORIQUE.
+    jid = cap.cap.generer_jeton_confirmation(rec["id"])
+    app = cap.cap.appliquer(rec["id"], slug, "succes", "tâche T9a", jeton=jid)
+    assert app["statut"] == "succes"
+
+
+def test_t9_secret_configure_refuse_sans_secret_et_avec_mauvais_secret(cap):
+    slug = cap.cap.capitaliser("Critères secretbeta mal confirmee", "r", "ctx", "nexus")
+    rec = cap.cap.consulter("secretbeta", "tâche T9b")
+    assert rec["slugs_retournes"] == [slug]
+
+    chemin = cap.cap._chemin_secret_jeton()
+    os.makedirs(os.path.dirname(chemin), exist_ok=True)
+    with open(chemin, "w", encoding="utf-8") as f:
+        json.dump({"hash": cap.cap._hash_secret("un-secret-de-test")}, f)
+
+    with pytest.raises(ValueError):
+        cap.cap.generer_jeton_confirmation(rec["id"])                          # sans secret
+    with pytest.raises(ValueError):
+        cap.cap.generer_jeton_confirmation(rec["id"], secret="mauvais-secret")  # mauvais secret
+
+
+def test_t9_secret_configure_accepte_bon_secret_et_fonctionne_avec_appliquer(cap):
+    slug = cap.cap.capitaliser("Critères secretgamma bien confirmee", "r", "ctx", "nexus")
+    rec = cap.cap.consulter("secretgamma", "tâche T9c")
+    assert rec["slugs_retournes"] == [slug]
+
+    chemin = cap.cap._chemin_secret_jeton()
+    os.makedirs(os.path.dirname(chemin), exist_ok=True)
+    with open(chemin, "w", encoding="utf-8") as f:
+        json.dump({"hash": cap.cap._hash_secret("un-secret-de-test")}, f)
+
+    jid = cap.cap.generer_jeton_confirmation(rec["id"], secret="un-secret-de-test")
+    app = cap.cap.appliquer(rec["id"], slug, "succes", "tâche T9c", jeton=jid)
+    assert app["statut"] == "succes"
