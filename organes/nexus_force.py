@@ -35,6 +35,7 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 if SCRIPT_DIR not in sys.path:
     sys.path.insert(0, SCRIPT_DIR)
 import nexus_sense  # source UNIQUE de lecture des capteurs (respecte CAPTEURS_ROOT)
+import nexus_liens  # source UNIQUE de voisins() pour le bonus de co-sélection de rank()
 
 # Pas de gagnant écrasant : petit pas par événement, borné.
 DELTA_SUCCES = 0.2
@@ -107,10 +108,16 @@ def calculer_forces(evenements=None, vitalite=None):
     changement de comportement historique — invariant préservé :
     calculer_forces() sans activité succes/echec reste {} (cf.
     test_orchestrateur_routage.test_observer_ok_laisse_calculer_forces_inerte).
-    Quand `vitalite` est fourni, chaque fiche avec un score succes/echec OU un
-    indice de vitalité non nul reçoit en plus DELTA_VITALITE_MAX * son indice,
-    ADDITIVEMENT au score succes/echec, bornée comme avant à
-    [FORCE_MIN, FORCE_MAX]."""
+
+    Quand `vitalite` est fourni, DEUX cas STRICTEMENT distincts (bug PR#86
+    corrigé : la vitalité seule NE DOIT JAMAIS écraser une force déjà présente) :
+      - fiche AVEC score succes/echec réel : formule HISTORIQUE inchangée
+        (FORCE_DEFAUT + DELTA_SUCCES/DELTA_ECHEC), vitalité ADDITIONNÉE en plus.
+      - fiche SANS aucun succes/echec (vitalité SEULE) : ADDITIVE sur ce qui
+        existe déjà dans forces.json (forces.get(fiche, FORCE_DEFAUT)), JAMAIS
+        un écrasement depuis FORCE_DEFAUT — une force manuelle/antérieure forte
+        ne peut être dégradée par la seule vitalité.
+    Les deux cas restent bornés à [FORCE_MIN, FORCE_MAX]."""
     if evenements is None:
         evenements = nexus_sense.lire()
 
@@ -135,10 +142,16 @@ def calculer_forces(evenements=None, vitalite=None):
 
     fiches = set(score) | {fiche for fiche, idx in vitalite.items() if idx}
     for fiche in fiches:
-        s = score.get(fiche, 0)
         idx = vitalite.get(fiche) or 0.0
-        valeur = (FORCE_DEFAUT + DELTA_SUCCES * max(s, 0) + DELTA_ECHEC * max(-s, 0)
-                  + DELTA_VITALITE_MAX * idx)
+        if fiche in score:
+            # Activité succes/echec réelle : formule HISTORIQUE, vitalité en plus.
+            s = score[fiche]
+            valeur = (FORCE_DEFAUT + DELTA_SUCCES * max(s, 0) + DELTA_ECHEC * max(-s, 0)
+                      + DELTA_VITALITE_MAX * idx)
+        else:
+            # Vitalité SEULE : ADDITIVE sur la force existante, jamais un écrasement
+            # depuis FORCE_DEFAUT (sinon une force manuelle/antérieure dégraderait).
+            valeur = forces.get(fiche, FORCE_DEFAUT) + DELTA_VITALITE_MAX * idx
         forces[fiche] = round(min(FORCE_MAX, max(FORCE_MIN, valeur)), 4)
     return forces
 
@@ -242,6 +255,16 @@ POIDS_SEMANTIQUE_DEFAUT = 0.5  # PROVISOIRE
 #   égale sans jamais DOMINER ni ÉCRASER la pertinence. Statut PROVISOIRE, même
 #   nature que f(force) : forme choisie, non mesurée.
 POIDS_FORCE_DEFAUT = 0.25  # PROVISOIRE (== plafond à alpha=0.5)
+
+# gamma — poids ADDITIF du bonus de co-sélection de liens (nexus_liens) dans le
+# score final. score = pert + beta*f(force) + gamma*liens_bonus. JAMAIS de
+# multiplication. MÊME plafond structurel que beta : gamma = min(0.5*(1-alpha),
+# max(0.0, poids_liens)) — au plein régime, le bonus de liens ne peut pas plus
+# renverser un écart de pertinence que la force ne le peut. N'AGIT QUE sur le
+# chemin additif (embedder fourni) : _rank_lexical (chemin légataire) ne reçoit
+# jamais ce paramètre, structurellement impossible à casser depuis là. Statut
+# PROVISOIRE (forme choisie, non mesurée), même nature que POIDS_FORCE_DEFAUT.
+POIDS_LIENS_DEFAUT = 0.15  # PROVISOIRE
 
 # seuil au-dessus duquel une fiche à fort score sémantique mais SANS recouvrement
 # lexical est ajoutée au jeu candidat (élargissement). Réglé pour séparer un vrai
@@ -461,23 +484,68 @@ def _texte_fiche(cand):
     return _titre_fiche(cand)
 
 
+def _liens_id_for(fl):
+    """Identité d'une fiche pour nexus_liens : radical sans « .md » — MÊME
+    convention que nexus_liens (fiches.id = fl[:-3]). `fl` est un nom de
+    fichier (« file » d'un candidat rank()), jamais un chemin complet."""
+    return fl[:-3] if fl.endswith(".md") else fl
+
+
+def _liens_bonus_for(graphe_liens, fl, cands_ids):
+    """Bonus de CO-SÉLECTION : le plus fort poids d'arête (via nexus_liens.
+    voisins) entre la fiche `fl` et un AUTRE candidat DÉJÀ présent dans
+    `cands_ids` — le jeu de candidats de CET appel de rank(), calculé sur le
+    POOL FINAL (après élargissement sémantique éventuel).
+
+    N'ÉLARGIT JAMAIS le jeu de candidats via les liens (contrairement au
+    sémantique avec `semantique_ouvre_candidats`) : un voisin absent de
+    `cands_ids` est ignoré, jamais ajouté.
+
+    0.0 si `graphe_liens` est None/vide, si aucun voisin n'est dans
+    `cands_ids`, ou si le seul voisin trouvé est la fiche elle-même."""
+    if not graphe_liens:
+        return 0.0
+    fid = _liens_id_for(fl)
+    meilleur = 0.0
+    for v in nexus_liens.voisins(graphe_liens, fid):
+        voisin = v.get("voisin")
+        if not voisin or voisin == fid:
+            continue
+        if voisin in cands_ids:
+            poids = v.get("poids", 0.0)
+            if poids > meilleur:
+                meilleur = poids
+    return meilleur
+
+
 def rank(query, candidates, forces=None, embedder=None,
          poids_semantique=POIDS_SEMANTIQUE_DEFAUT,
          poids_force=POIDS_FORCE_DEFAUT,
          semantique_ouvre_candidats=False,
          seuil_semantique_elargissement=SEUIL_ELARGISSEMENT_DEFAUT,
-         corpus=None, comptes_force=None):
+         corpus=None, comptes_force=None,
+         liens=None, poids_liens=POIDS_LIENS_DEFAUT):
     """Classe des candidats (chacun portant « _search », « file », « path »).
 
     RÉTROCOMPAT : `embedder=None` → comportement HISTORIQUE strictement
     identique (score = pertinence(IDF) × force) au régime NOMINAL, forme de
-    retour inchangée.
+    retour inchangée. `liens`/`poids_liens` sont IGNORÉS sur ce chemin : ils
+    n'agissent QUE sur le chemin additif (embedder fourni), structurellement
+    impossible à casser depuis le chemin légataire (_rank_lexical ne reçoit
+    jamais ces paramètres).
 
     Avec un embedder injecté, fusion multi-signaux ADDITIVE :
         rel_n = pertinence(IDF) normalisée par le max des candidats  ∈ [0,1]
         sem   = cosinus(embedder(query), embedder(fiche))            ∈ [0,1]
         pert  = (1 - alpha) * rel_n + alpha * sem                    ∈ [0,1]
-        score = pert + beta * f(force)      (JAMAIS pert * force)
+        score = pert + beta * f(force) + gamma * liens_bonus  (JAMAIS de ×)
+
+    `liens` (nexus_liens.construire_liens(), optionnel) : `liens_bonus` = le
+    plus fort poids d'arête vers un AUTRE candidat déjà présent dans le jeu de
+    candidats de CET appel (cf. `_liens_bonus_for`) — 0.0 par défaut
+    (`liens=None`), ce qui rend le score BYTE-IDENTIQUE à avant l'ajout de ce
+    paramètre. Le jeu de candidats n'est JAMAIS élargi via les liens
+    (contrairement au sémantique) : un voisin absent du jeu ne compte pas.
 
     PORTE À SEUIL de la force (les DEUX chemins) : la force d'une fiche n'influence
     le classement QUE si son signal jugé est suffisant (cf. compter_events_force /
@@ -500,6 +568,8 @@ def rank(query, candidates, forces=None, embedder=None,
     total = comptes.get("_total", 0)
 
     # --- Chemin de RÉTROCOMPAT : aucun embedder → aucun signal sémantique. --- #
+    # `liens`/`poids_liens` n'existent PAS pour _rank_lexical : structurellement
+    # impossible à casser depuis ce chemin.
     if embedder is None:
         return _rank_lexical(query, candidates, forces, comptes)
 
@@ -508,6 +578,8 @@ def rank(query, candidates, forces=None, embedder=None,
     alpha = _clamp01(poids_semantique)
     # PLAFOND de la force : jamais plus que la moitié du poids de la pertinence.
     beta = min(0.5 * (1.0 - alpha), max(0.0, poids_force))
+    # MÊME plafond pour le bonus de liens.
+    gamma = min(0.5 * (1.0 - alpha), max(0.0, poids_liens))
 
     qvec = _embed_robuste(embedder, query)
 
@@ -535,6 +607,10 @@ def rank(query, candidates, forces=None, embedder=None,
     # 3) Normalisation lexicale par le max du POOL FINAL (élargissement compris).
     max_rel = max((it.get("_relevance", 0.0) for it in pool), default=0.0)
 
+    # jeu de candidats de CET appel pour le bonus de liens — le POOL FINAL
+    # (élargissement sémantique compris), JAMAIS élargi par les liens eux-mêmes.
+    cands_ids = {_liens_id_for(it.get("file", "")) for it in pool}
+
     # 4) Fusion additive + score final (jamais de multiplication terminale).
     ranked = []
     for it in pool:
@@ -552,6 +628,7 @@ def rank(query, candidates, forces=None, embedder=None,
             ff = f_force(force)
         else:
             ff = 0.0
+        liens_bonus = _liens_bonus_for(liens, it.get("file", ""), cands_ids)
         item = dict(it)
         item["_relevance"] = rel
         item["_rel_n"] = rel_n
@@ -559,7 +636,8 @@ def rank(query, candidates, forces=None, embedder=None,
         item["_pert"] = pert
         item["_force"] = force
         item["_f_force"] = ff
-        item["_score"] = pert + beta * ff
+        item["_liens_bonus"] = liens_bonus
+        item["_score"] = pert + beta * ff + gamma * liens_bonus
         ranked.append(item)
     ranked.sort(key=lambda x: (-x["_score"], x.get("path", ""), x.get("file", "")))
     return ranked
