@@ -62,6 +62,7 @@ if SCRIPT_DIR not in sys.path:
 import nexus_force    # source UNIQUE du chemin mémoire + rank/calculer_forces (LU)
 import nexus_sense    # capteur : log_event(fiche=<slug>, statut=succes|echec)
 import nexus_lecons   # journal de leçons + transfert (pointeur, RÉFÉRENCE)
+import nexus_vitalite # indice de vitalité observée (réutilisation cross-session)
 
 # --------------------------------------------------------------------------- #
 # Catégorie fixe des fiches capitalisées : le 2e niveau sous structure/<domaine>/.
@@ -259,7 +260,10 @@ def consulter(query, tache, k=3, memoire=None):
       • `memoire=None` (défaut, chemin CAPITAL) : le tri est INTÉGRALEMENT délégué
         à nexus_force.rank() sur les fiches criteres-kily — cet organe ne calcule
         aucun score. `slugs_retournes` = slugs des candidats à pertinence non nulle,
-        plafonnés aux `k` premiers. COMPORTEMENT HISTORIQUE INCHANGÉ.
+        plafonnés aux `k` premiers. Les forces sont calculées avec
+        `vitalite=nexus_vitalite.indice_vitalite()` (AJOUT PUR : sans signal de
+        vitalité réel, calculer_forces(vitalite={}) == calculer_forces(),
+        COMPORTEMENT HISTORIQUE INCHANGÉ).
 
       • `memoire` fourni (chemin BOUCLE) : le RAPPEL est DÉLÉGUÉ à `memoire.recall`
         (portée `all`, results[0] — MIROIR EXACT du rappel historique de la boucle),
@@ -296,7 +300,8 @@ def consulter(query, tache, k=3, memoire=None):
 
     # CHEMIN CAPITAL (historique) : délégation PURE à rank() sur criteres-kily.
     cands = _candidats()                                  # collecte I/O, PAS du tri
-    forces = nexus_force.calculer_forces()                # forces vivantes courantes
+    vitalite = nexus_vitalite.indice_vitalite()           # réutilisation cross-session (AJOUT PUR)
+    forces = nexus_force.calculer_forces(vitalite=vitalite)  # forces vivantes courantes
     ranked = nexus_force.rank(query, cands, forces=forces)   # DÉLÉGATION pure
     retenus = [_slug_de(c) for c in ranked if c.get("_relevance", 0.0) > 0.0][:k]
 
