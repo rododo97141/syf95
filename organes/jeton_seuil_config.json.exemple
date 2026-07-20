@@ -1,0 +1,19 @@
+{
+  "seuil_m": 2,
+  "parties": [
+    {
+      "nom": "kily",
+      "hash": "REMPLACER_PAR_LE_HASH_SHA256_HEX_DU_SECRET_DE_KILY"
+    },
+    {
+      "nom": "nexus-autre-socle",
+      // ATTENTION : le secret de la partie "nexus-autre-socle" ne doit JAMAIS
+      // transiter par un agent IA (ni dans un prompt, ni dans un fichier lu par
+      // une IA, ni dans un log) -- calculer son hash HORS-LIGNE, localement, et
+      // ne coller QUE ce hash ici. Ce fichier est un EXEMPLE inerte : copier vers
+      // capital/jeton_seuil_config.json (non versionné) avant de remplacer les
+      // placeholders.
+      "hash": "REMPLACER_PAR_LE_HASH_SHA256_HEX_DU_SECRET_DE_NEXUS_AUTRE_SOCLE"
+    }
+  ]
+}
